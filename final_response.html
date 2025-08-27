@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chrome Remote Desktop代替 - Web版</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a1a;
+            color: #ffffff;
+            overflow: hidden;
+        }
+        
+        .header {
+            background: #2d3748;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            z-index: 1000;
+            position: relative;
+        }
+        
+        .title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #4299e1;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .status {
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        
+        .status.connected {
+            background: #38a169;
+            color: white;
+        }
+        
+        .status.disconnected {
+            background: #e53e3e;
+            color: white;
+        }
+        
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        
+        .btn:hover {
+            transform: translateY(-1px);
+        }
+        
+        .btn-primary {
+            background: #4299e1;
+            color: white;
+        }
+        
+        .btn-secondary {
+            background: #718096;
+            color: white;
+        }
+        
+        .desktop-container {
+            position: relative;
+            width: 100vw;
+            height: calc(100vh - 60px);
+            overflow: hidden;
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        #desktop-screen {
+            max-width: 100%;
+            max-height: 100%;
+            cursor: crosshair;
+            border: 2px solid #4299e1;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(66, 153, 225, 0.3);
+        }
+        
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #a0aec0;
+        }
+        
+        .loading .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #2d3748;
+            border-top: 4px solid #4299e1;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .toolbar {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(45, 55, 72, 0.95);
+            padding: 10px 20px;
+            border-radius: 25px;
+            display: flex;
+            gap: 10px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+        
+        .toolbar input {
+            padding: 8px 12px;
+            border: 1px solid #4a5568;
+            border-radius: 6px;
+            background: #2d3748;
+            color: white;
+            min-width: 200px;
+        }
+        
+        .toolbar input:focus {
+            outline: none;
+            border-color: #4299e1;
+            box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
+        }
+        
+        .key-shortcuts {
+            position: fixed;
+            top: 70px;
+            right: 20px;
+            background: rgba(45, 55, 72, 0.95);
+            padding: 15px;
+            border-radius: 10px;
+            backdrop-filter: blur(10px);
+            max-width: 250px;
+            font-size: 12px;
+        }
+        
+        .key-shortcuts h4 {
+            color: #4299e1;
+            margin-bottom: 10px;
+        }
+        
+        .shortcut-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            padding: 2px 0;
+        }
+        
+        .feedback {
+            position: fixed;
+            top: 70px;
+            left: 20px;
+            background: rgba(45, 55, 72, 0.95);
+            padding: 10px 15px;
+            border-radius: 8px;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s;
+            opacity: 0;
+            transform: translateY(-10px);
+        }
+        
+        .feedback.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        
+        .feedback.success {
+            border-left: 4px solid #38a169;
+        }
+        
+        .feedback.error {
+            border-left: 4px solid #e53e3e;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="title">🖥️ Chrome Remote Desktop代替 - Web版</div>
+        <div class="controls">
+            <div id="status" class="status disconnected">切断中</div>
+            <button id="fullscreen-btn" class="btn btn-secondary">全画面</button>
+            <button id="refresh-btn" class="btn btn-primary">画面更新</button>
+        </div>
+    </div>
+    
+    <div class="desktop-container">
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <div>リモートデスクトップに接続中...</div>
+        </div>
+        <img id="desktop-screen" style="display: none;" alt="Remote Desktop Screen">
+    </div>
+    
+    <div class="toolbar">
+        <input type="text" id="text-input" placeholder="ここにテキストを入力してEnterでリモートPCに送信">
+        <button id="send-text" class="btn btn-primary">送信</button>
+        <button id="ctrl-c" class="btn btn-secondary">Ctrl+C</button>
+        <button id="ctrl-v" class="btn btn-secondary">Ctrl+V</button>
+        <button id="enter" class="btn btn-secondary">Enter</button>
+    </div>
+    
+    <div class="key-shortcuts">
+        <h4>🎮 操作方法</h4>
+        <div class="shortcut-item">
+            <span>左クリック</span>
+            <span>画面をクリック</span>
+        </div>
+        <div class="shortcut-item">
+            <span>テキスト入力</span>
+            <span>下部のテキストボックス</span>
+        </div>
+        <div class="shortcut-item">
+            <span>スクロール</span>
+            <span>マウスホイール</span>
+        </div>
+        <div class="shortcut-item">
+            <span>全画面</span>
+            <span>F11キー</span>
+        </div>
+    </div>
+    
+    <div id="feedback" class="feedback"></div>
+
+    <script>
+        // Socket.IO接続
+        const socket = io();
+        
+        // DOM要素
+        const statusElement = document.getElementById('status');
+        const loadingElement = document.getElementById('loading');
+        const screenElement = document.getElementById('desktop-screen');
+        const textInput = document.getElementById('text-input');
+        const feedbackElement = document.getElementById('feedback');
+        
+        let isConnected = false;
+        let screenWidth = 0;
+        let screenHeight = 0;
+        
+        // フィードバック表示
+        function showFeedback(message, type = 'success') {
+            feedbackElement.textContent = message;
+            feedbackElement.className = `feedback ${type} show`;
+            setTimeout(() => {
+                feedbackElement.classList.remove('show');
+            }, 2000);
+        }
+        
+        // 接続イベント
+        socket.on('connect', () => {
+            console.log('Connected to remote desktop server');
+        });
+        
+        socket.on('connected', (data) => {
+            isConnected = true;
+            screenWidth = data.screen_width;
+            screenHeight = data.screen_height;
+            
+            statusElement.textContent = '接続済み';
+            statusElement.className = 'status connected';
+            
+            loadingElement.style.display = 'none';
+            screenElement.style.display = 'block';
+            
+            showFeedback(`リモートデスクトップに接続しました (${screenWidth}x${screenHeight})`);
+        });
+        
+        // 切断イベント
+        socket.on('disconnect', () => {
+            isConnected = false;
+            statusElement.textContent = '切断中';
+            statusElement.className = 'status disconnected';
+            
+            screenElement.style.display = 'none';
+            loadingElement.style.display = 'block';
+            
+            showFeedback('接続が切断されました', 'error');
+        });
+        
+        // スクリーンショット受信
+        socket.on('screenshot', (data) => {
+            if (data.image) {
+                screenElement.src = data.image;
+            }
+        });
+        
+        // アクション結果
+        socket.on('action_result', (data) => {
+            const { action, success } = data;
+            if (success) {
+                showFeedback(`${action}操作が完了しました`);
+            } else {
+                showFeedback(`${action}操作に失敗しました`, 'error');
+            }
+        });
+        
+        // 画面クリック
+        screenElement.addEventListener('click', (e) => {
+            if (!isConnected) return;
+            
+            const rect = screenElement.getBoundingClientRect();
+            const x = Math.round((e.clientX - rect.left) * (screenWidth / rect.width));
+            const y = Math.round((e.clientY - rect.top) * (screenHeight / rect.height));
+            
+            socket.emit('click', { x, y });
+            
+            // クリック位置を視覚的にフィードバック
+            const dot = document.createElement('div');
+            dot.style.cssText = `
+                position: fixed;
+                left: ${e.clientX - 5}px;
+                top: ${e.clientY - 5}px;
+                width: 10px;
+                height: 10px;
+                background: #4299e1;
+                border-radius: 50%;
+                pointer-events: none;
+                z-index: 1000;
+                animation: clickFeedback 0.3s ease-out forwards;
+            `;
+            document.body.appendChild(dot);
+            
+            setTimeout(() => dot.remove(), 300);
+        });
+        
+        // スクロール
+        screenElement.addEventListener('wheel', (e) => {
+            if (!isConnected) return;
+            e.preventDefault();
+            
+            const rect = screenElement.getBoundingClientRect();
+            const x = Math.round((e.clientX - rect.left) * (screenWidth / rect.width));
+            const y = Math.round((e.clientY - rect.top) * (screenHeight / rect.height));
+            const direction = e.deltaY > 0 ? -3 : 3;
+            
+            socket.emit('scroll', { x, y, direction });
+        });
+        
+        // テキスト入力
+        textInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendText();
+            }
+        });
+        
+        function sendText() {
+            const text = textInput.value;
+            if (text && isConnected) {
+                socket.emit('type', { text });
+                textInput.value = '';
+            }
+        }
+        
+        // キーボードショートカット
+        function sendKey(key) {
+            if (isConnected) {
+                socket.emit('key', { key });
+            }
+        }
+        
+        // ボタンイベント
+        document.getElementById('send-text').addEventListener('click', sendText);
+        document.getElementById('ctrl-c').addEventListener('click', () => sendKey('ctrl+c'));
+        document.getElementById('ctrl-v').addEventListener('click', () => sendKey('ctrl+v'));
+        document.getElementById('enter').addEventListener('click', () => sendKey('enter'));
+        
+        document.getElementById('fullscreen-btn').addEventListener('click', () => {
+            if (document.fullscreenElement) {
+                document.exitFullscreen();
+            } else {
+                document.documentElement.requestFullscreen();
+            }
+        });
+        
+        document.getElementById('refresh-btn').addEventListener('click', () => {
+            location.reload();
+        });
+        
+        // 全画面キーボードショートカット
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'F11') {
+                e.preventDefault();
+                document.getElementById('fullscreen-btn').click();
+            }
+        });
+        
+        // CSS Animation for click feedback
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes clickFeedback {
+                0% {
+                    transform: scale(1);
+                    opacity: 1;
+                }
+                100% {
+                    transform: scale(2);
+                    opacity: 0;
+                }
+            }
+        `;
+        document.head.appendChild(style);
+        
+        // 初期メッセージ
+        setTimeout(() => {
+            if (!isConnected) {
+                showFeedback('サーバーに接続中です...', 'error');
+            }
+        }, 3000);
+    </script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+@echo off
+echo Stopping all Python processes...
+taskkill /F /IM python.exe /T 2>nul
+echo Waiting 3 seconds...
+timeout /t 3 /nobreak >nul
+echo Starting simple debug client...
+cd /d "C:\Users\Tenormusica\web-remote-desktop"
+python simple_debug_client.py
+pause

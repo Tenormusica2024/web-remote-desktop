@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Connection Test</title>
+    <style>
+        body { background: #111; color: white; font-family: Arial; padding: 20px; }
+        .status { padding: 20px; margin: 10px 0; border-radius: 5px; }
+        .connected { background: #4CAF50; }
+        .disconnected { background: #F44336; }
+        .testing { background: #FF9800; }
+        button { padding: 10px 20px; background: #2196F3; color: white; border: none; border-radius: 5px; cursor: pointer; margin: 5px; }
+        input { padding: 10px; background: #222; color: white; border: 1px solid #555; border-radius: 5px; width: 300px; }
+    </style>
+</head>
+<body>
+    <h1>Local Remote Desktop Connection Test</h1>
+    
+    <div id="status" class="status testing">Testing connection...</div>
+    
+    <div>
+        <h3>Test Text Input:</h3>
+        <input type="text" id="testText" placeholder="Type text to send to PC" value="Hello from remote!">
+        <button onclick="sendTestText()">Send Text</button>
+        <button onclick="sendTestKey('enter')">Press Enter</button>
+    </div>
+    
+    <div id="log" style="background: #222; padding: 15px; margin-top: 20px; border-radius: 5px; height: 200px; overflow-y: scroll;">
+        <p>Connection log:</p>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script>
+        const socket = io('http://localhost:8092', {
+            transports: ['websocket', 'polling'],
+            timeout: 5000
+        });
+        
+        const statusEl = document.getElementById('status');
+        const logEl = document.getElementById('log');
+        
+        function log(message) {
+            const time = new Date().toLocaleTimeString();
+            logEl.innerHTML += `<p>[${time}] ${message}</p>`;
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+        
+        socket.on('connect', () => {
+            statusEl.textContent = 'Connected to Local Server!';
+            statusEl.className = 'status connected';
+            log('✅ Connected using: ' + socket.io.engine.transport.name);
+        });
+        
+        socket.on('disconnect', () => {
+            statusEl.textContent = 'Disconnected from Server';
+            statusEl.className = 'status disconnected';
+            log('❌ Disconnected');
+        });
+        
+        socket.on('command_result', (data) => {
+            log('📋 ' + data.message + (data.success ? ' ✅' : ' ❌'));
+        });
+        
+        socket.on('connect_error', (error) => {
+            log('❌ Connection error: ' + error);
+        });
+        
+        function sendTestText() {
+            const text = document.getElementById('testText').value;
+            socket.emit('execute_command', {
+                command: 'type',
+                data: { text: text }
+            });
+            log('📤 Sent text: ' + text);
+        }
+        
+        function sendTestKey(key) {
+            socket.emit('execute_command', {
+                command: 'key',
+                data: { key: key }
+            });
+            log('⌨️ Sent key: ' + key);
+        }
+        
+        log('🔍 Starting connection test...');
+    </script>
+</body>
+</html>

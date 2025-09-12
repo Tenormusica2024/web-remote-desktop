@@ -20,14 +20,14 @@ except Exception:
 
 # ---------- Config ----------
 ROOT = Path(__file__).resolve().parent
-# load_dotenv(ROOT / ".env")  # 一時的に無効化
+load_dotenv(ROOT / ".env", override=True)
 
-# 直接設定
-GITHUB_TOKEN = "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"
-GITHUB_REPO = "Tenormusica2024/web-remote-desktop"
-GITHUB_BRANCH = "master"
-MONITOR_ISSUE = "1"  # 監視対象Issue番号
-POLL_INTERVAL = 30  # 秒
+# 環境変数から設定を読み込み
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+GITHUB_REPO = os.getenv("GITHUB_REPO", "Tenormusica2024/web-remote-desktop")
+GITHUB_BRANCH = os.getenv("GITHUB_BRANCH", "master")
+MONITOR_ISSUE = os.getenv("MONITOR_ISSUE_NUMBER", "1")  # 監視対象Issue番号
+POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", "30"))  # 秒
 
 API_BASE = "https://api.github.com"
 LAST_COMMENT_FILE = ROOT / "last_comment_id.txt"
@@ -116,7 +116,7 @@ def check_issue_title():
             except Exception as e:
                 log(f"Error reading last title file: {e}")
                 
-            # 処理開始をマーク
+            # 処理開始をマーク（重複実行を厳格に防ぐ）
             PROCESSING_TITLE_HASH = current_title_content
             
             # 新しいタイトル内容を保存（実行前に保存して重複防止）
@@ -125,20 +125,20 @@ def check_issue_title():
                 log(f"Processing new title command: {current_title_content}")
             except Exception as e:
                 log(f"Error saving title content: {e}")
+                # 処理完了をマーク（エラー時も解除）
+                PROCESSING_TITLE_HASH = None
+                return False
                 
-            # 短時間スリープで他の同時処理を防ぐ
-            time.sleep(1)
-            
             # コマンド実行
             cmd = {
-                "id": f"title_{updated_at}",
+                "id": f"title_{updated_at}_{int(time.time())}",  # タイムスタンプで一意性確保
                 "author": author,
                 "body": f"Title command: {title}",
                 "created_at": updated_at,
                 "url": issue_data.get("html_url", "")
             }
             
-            log(f"Title command detected from {cmd['author']}: {title}")
+            log(f"Executing single title command from {cmd['author']}: {title}")
             execute_screenshot_command(cmd)
             
             # 処理完了をマーク
@@ -151,7 +151,7 @@ def check_issue_title():
         return False
 
 def check_new_commands():
-    """新しいコメントでスクリーンショット指示をチェック"""
+    """新しいコメントでスクリーンショット指示をチェック（重複防止強化）"""
     try:
         owner, repo = GITHUB_REPO.split("/", 1)
         url = f"{API_BASE}/repos/{owner}/{repo}/issues/{MONITOR_ISSUE}/comments"
@@ -177,8 +177,15 @@ def check_new_commands():
             author = comment.get("user", {}).get("login", "unknown")
             created_at = comment.get("created_at", "")
             
-            # スクリーンショット指示を検知（「ss」のみ、自分のリプライは除外）
-            if "ss" in body and not body.startswith("screenshot taken"):
+            # スクリーンショット指示を検知（厳格な条件）
+            # 1. 「ss」を含む
+            # 2. 自分のリプライではない（"screenshot taken"で始まらない）
+            # 3. システムコメントではない（"Generated with Claude Code"を含まない）
+            if ("ss" in body and 
+                not body.startswith("screenshot taken") and 
+                "generated with claude code" not in body and
+                "auto-captured in response" not in body):
+                
                 new_commands.append({
                     "id": comment_id,
                     "author": author,
@@ -188,12 +195,29 @@ def check_new_commands():
                 })
                 
         if new_commands:
-            # 最新のコメントIDを保存
-            latest_id = max(cmd["id"] for cmd in new_commands)
-            save_last_comment_id(latest_id)
+            # 重複チェック：同じ作者の連続したコメントは1つだけ処理
+            filtered_commands = []
+            last_author = None
+            last_body = None
             
-            for cmd in new_commands:
-                log(f"Screenshot command detected from {cmd['author']}: {cmd['body']}")
+            for cmd in sorted(new_commands, key=lambda x: x["created_at"]):
+                # 同じ作者で同じ内容のコメントをスキップ
+                if cmd["author"] == last_author and cmd["body"] == last_body:
+                    log(f"Skipping duplicate command from {cmd['author']}: {cmd['body']}")
+                    continue
+                    
+                filtered_commands.append(cmd)
+                last_author = cmd["author"]
+                last_body = cmd["body"]
+            
+            if filtered_commands:
+                # 最新のコメントIDを保存
+                latest_id = max(cmd["id"] for cmd in new_commands)
+                save_last_comment_id(latest_id)
+                
+                # 実際に処理するコマンドは1つだけ（最新）
+                cmd = filtered_commands[-1]
+                log(f"Processing single screenshot command from {cmd['author']}: {cmd['body']}")
                 execute_screenshot_command(cmd)
                 
         return True
@@ -300,22 +324,47 @@ def execute_screenshot_command(cmd):
             pass
 
 def monitor_loop():
-    """メイン監視ループ"""
+    """メイン監視ループ（重複防止強化 + 10時間制限）"""
     _assert_config()
+    
+    # 10時間 = 36000秒の制限
+    start_time = time.time()
+    max_duration = 10 * 60 * 60  # 10 hours in seconds
+    
     log(f"Starting remote screenshot monitor (Issue #{MONITOR_ISSUE})")
     log(f"Poll interval: {POLL_INTERVAL} seconds")
+    log(f"Duplicate prevention: ENABLED")
+    log(f"Auto-stop after: 10 hours (36000 seconds)")
+    log(f"Monitor will automatically stop at: {datetime.fromtimestamp(start_time + max_duration).strftime('%Y-%m-%d %H:%M:%S')}")
     
     try:
         while True:
-            # コメントとタイトル両方をチェック
+            # 10時間制限をチェック
+            elapsed = time.time() - start_time
+            if elapsed >= max_duration:
+                log(f"Auto-stopping after {elapsed/3600:.1f} hours of operation")
+                break
+            
+            # 1時間ごとに残り時間をログ出力
+            if int(elapsed) % 3600 == 0 and int(elapsed) > 0:
+                remaining_hours = (max_duration - elapsed) / 3600
+                log(f"Monitor running: {elapsed/3600:.1f}h elapsed, {remaining_hours:.1f}h remaining")
+            
+            # コメントとタイトル両方をチェック（順次実行で重複を防ぐ）
             check_new_commands()
+            time.sleep(2)  # 小さな間隔でコメントとタイトル処理を分離
             check_issue_title()
             time.sleep(POLL_INTERVAL)
+            
     except KeyboardInterrupt:
-        log("Monitor stopped by user")
+        elapsed = time.time() - start_time
+        log(f"Monitor stopped by user after {elapsed/3600:.1f} hours")
     except Exception as e:
-        log(f"Monitor crashed: {e}")
+        elapsed = time.time() - start_time
+        log(f"Monitor crashed after {elapsed/3600:.1f} hours: {e}")
         time.sleep(60)  # 1分待ってから再起動を試行
+    
+    log("Monitor shutdown complete")
 
 def main():
     import argparse

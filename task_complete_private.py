@@ -91,17 +91,23 @@ def post_completion_comment(custom_message=None):
         return False
 
 def main():
+    # UTF-8エンコーディング設定（Windows環境対応）
+    import sys
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+    
     print("=" * 50)
-    print("Claude Code Task Complete Report System")
+    print("Claude Code Task Report System")
     print("=" * 50)
     
     # Command line arguments for custom message
     if len(sys.argv) > 1:
         custom_message = " ".join(sys.argv[1:])
-        print(f"Custom message: {custom_message}")
+        print(f"Custom message: {custom_message[:100]}...")  # 最初の100文字のみ表示
     else:
         custom_message = None
-        print("Using standard completion message")
+        print("Using standard report message")
     
     print(f"Target: {GITHUB_REPO} Issue #{MONITOR_ISSUE}")
     print(f"Execution time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -112,9 +118,9 @@ def main():
     
     print()
     if success:
-        print("OK Task completion report posted successfully!")
+        print("OK Task report posted successfully!")
     else:
-        print("NG Task completion report failed.")
+        print("NG Task report failed.")
     
     print("=" * 50)
 

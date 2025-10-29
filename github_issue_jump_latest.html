@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub Issue 最新コメントジャンプ - ブックマークレット</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 2rem;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 3rem;
+            max-width: 800px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        h1 {
+            color: #2d3748;
+            margin-bottom: 1.5rem;
+            font-size: 2rem;
+        }
+
+        .description {
+            color: #4a5568;
+            margin-bottom: 2rem;
+            line-height: 1.6;
+        }
+
+        .bookmarklet-box {
+            background: #f7fafc;
+            border: 2px dashed #667eea;
+            border-radius: 10px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .bookmarklet-box h2 {
+            color: #667eea;
+            margin-bottom: 1rem;
+            font-size: 1.3rem;
+        }
+
+        .bookmarklet-link {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1rem 2rem;
+            border-radius: 10px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1.1rem;
+            transition: transform 0.2s, box-shadow 0.2s;
+            cursor: move;
+        }
+
+        .bookmarklet-link:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .instructions {
+            background: #edf2f7;
+            border-left: 4px solid #667eea;
+            padding: 1.5rem;
+            border-radius: 5px;
+            margin-bottom: 2rem;
+        }
+
+        .instructions h3 {
+            color: #2d3748;
+            margin-bottom: 1rem;
+        }
+
+        .instructions ol {
+            margin-left: 1.5rem;
+            color: #4a5568;
+            line-height: 1.8;
+        }
+
+        .code-box {
+            background: #2d3748;
+            color: #a0aec0;
+            padding: 1rem;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            overflow-x: auto;
+            margin: 1rem 0;
+        }
+
+        .alternative-methods {
+            margin-top: 2rem;
+        }
+
+        .alternative-methods h3 {
+            color: #2d3748;
+            margin-bottom: 1rem;
+        }
+
+        .method-card {
+            background: #f7fafc;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            border-left: 4px solid #764ba2;
+        }
+
+        .method-card h4 {
+            color: #667eea;
+            margin-bottom: 0.5rem;
+        }
+
+        .method-card p {
+            color: #4a5568;
+            line-height: 1.6;
+        }
+
+        .badge {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 0.3rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin-left: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 GitHub Issue 最新コメントジャンプ</h1>
+        
+        <p class="description">
+            GitHub Issueの最新コメントに一瞬でジャンプするブックマークレットです。
+            コメント数が多い Issue でも、クリック1回で最新コメントへ移動できます。
+        </p>
+
+        <div class="bookmarklet-box">
+            <h2>📌 ブックマークレット</h2>
+            <p style="color: #4a5568; margin-bottom: 1rem;">
+                下のボタンをブックマークバーにドラッグ＆ドロップしてください：
+            </p>
+            <a href="javascript:(function(){var comments=document.querySelectorAll('.timeline-comment');if(comments.length>0){comments[comments.length-1].scrollIntoView({behavior:'smooth',block:'center'});comments[comments.length-1].style.backgroundColor='#fffbeb';setTimeout(function(){comments[comments.length-1].style.backgroundColor='';},2000);}else{alert('コメントが見つかりませんでした');}})();" 
+               class="bookmarklet-link">
+                ⚡ 最新コメントへジャンプ
+            </a>
+        </div>
+
+        <div class="instructions">
+            <h3>📖 使い方</h3>
+            <ol>
+                <li>上の「⚡ 最新コメントへジャンプ」ボタンをブックマークバーにドラッグ＆ドロップ</li>
+                <li>GitHub Issueページを開く</li>
+                <li>ブックマークバーの「最新コメントへジャンプ」をクリック</li>
+                <li>自動的に最新コメントまでスクロール＆ハイライト表示</li>
+            </ol>
+        </div>
+
+        <div class="code-box">
+javascript:(function(){
+    var comments = document.querySelectorAll('.timeline-comment');
+    if (comments.length > 0) {
+        comments[comments.length-1].scrollIntoView({
+            behavior: 'smooth',
+            block: 'center'
+        });
+        // 最新コメントを一時的にハイライト
+        comments[comments.length-1].style.backgroundColor = '#fffbeb';
+        setTimeout(function(){
+            comments[comments.length-1].style.backgroundColor = '';
+        }, 2000);
+    } else {
+        alert('コメントが見つかりませんでした');
+    }
+})();
+        </div>
+
+        <div class="alternative-methods">
+            <h3>🔧 その他の方法</h3>
+
+            <div class="method-card">
+                <h4>方法1: キーボードショートカット <span class="badge">最速</span></h4>
+                <p>
+                    <strong>Ctrl+F</strong> → 今日の日付を検索（例: 2025-10-02）→ 下矢印で最新まで移動
+                </p>
+            </div>
+
+            <div class="method-card">
+                <h4>方法2: GitHub CLI</h4>
+                <div class="code-box" style="margin-top: 0.5rem;">
+gh issue view 1 --repo Tenormusica2024/Private --comments | tail -50
+                </div>
+            </div>
+
+            <div class="method-card">
+                <h4>方法3: URL直接アクセス</h4>
+                <p>
+                    最新コメントのURL（#issuecomment-XXXXXX）を直接ブラウザに入力
+                </p>
+            </div>
+
+            <div class="method-card">
+                <h4>方法4: ブラウザ開発者ツール</h4>
+                <div class="code-box" style="margin-top: 0.5rem;">
+// F12 でコンソール開いて実行
+document.querySelectorAll('.timeline-comment')[
+    document.querySelectorAll('.timeline-comment').length - 1
+].scrollIntoView({behavior: 'smooth'});
+                </div>
+            </div>
+        </div>
+
+        <div style="margin-top: 2rem; padding-top: 2rem; border-top: 1px solid #e2e8f0; color: #718096; text-align: center;">
+            <p>Created by Claude Code | GitHub Issue #1 Quick Access Tool</p>
+        </div>
+    </div>
+</body>
+</html>

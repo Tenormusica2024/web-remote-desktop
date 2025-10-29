@@ -8,10 +8,14 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parent
-load_dotenv(ROOT / ".env", override=True)
+# Load private repository configuration first
+load_dotenv(ROOT / ".env_private", override=True)
+# Fallback to standard .env if private config not found
+if not os.getenv("GITHUB_TOKEN"):
+    load_dotenv(ROOT / ".env", override=True)
 
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-GITHUB_REPO = os.getenv("GITHUB_REPO", "Tenormusica2024/web-remote-desktop")
+GITHUB_REPO = os.getenv("GITHUB_REPO", "Tenormusica2024/Private")
 
 def get_latest_comment_id():
     """最新のコメントIDを取得"""

@@ -26,6 +26,20 @@ import requests
 import pyautogui
 import pyperclip
 
+# Load .env file if exists
+def load_env():
+    env_file = Path(__file__).parent / ".env"
+    if env_file.exists():
+        with open(env_file, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    key, value = line.split('=', 1)
+                    if not os.getenv(key):  # Only set if not already set
+                        os.environ[key] = value
+
+load_env()
+
 # ====== 設定（環境変数） ======
 GH_REPO   = os.getenv("GH_REPO")            # "owner/repo"
 GH_ISSUE  = os.getenv("GH_ISSUE")           # "123"

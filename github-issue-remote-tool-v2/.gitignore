@@ -1,0 +1,33 @@
+# 設定ファイル（個人情報を含む）
+config.json
+
+# ログファイル
+*.log
+
+# 状態ファイル
+.monitor_state_*.json
+
+# スクリーンショット
+screenshot_*.png
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# エディタ
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

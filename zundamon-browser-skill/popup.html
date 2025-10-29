@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {
+      width: 300px;
+      padding: 16px;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 0;
+    }
+    
+    h2 {
+      margin: 0 0 16px 0;
+      font-size: 16px;
+      color: #333;
+    }
+    
+    .toggle-container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px;
+      background: #f5f5f5;
+      border-radius: 8px;
+      margin-bottom: 16px;
+    }
+    
+    .toggle-label {
+      font-size: 14px;
+      color: #666;
+    }
+    
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 48px;
+      height: 24px;
+    }
+    
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #ccc;
+      transition: .4s;
+      border-radius: 24px;
+    }
+    
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 18px;
+      width: 18px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: .4s;
+      border-radius: 50%;
+    }
+    
+    input:checked + .slider {
+      background-color: #4CAF50;
+    }
+    
+    input:checked + .slider:before {
+      transform: translateX(24px);
+    }
+    
+    .status {
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      margin-bottom: 12px;
+    }
+    
+    .status.success {
+      background: #e8f5e9;
+      color: #2e7d32;
+    }
+    
+    .status.error {
+      background: #ffebee;
+      color: #c62828;
+    }
+    
+    .status.info {
+      background: #e3f2fd;
+      color: #1565c0;
+    }
+    
+    .test-button {
+      width: 100%;
+      padding: 10px;
+      background: #2196F3;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      transition: background 0.3s;
+    }
+    
+    .test-button:hover {
+      background: #1976D2;
+    }
+    
+    .test-button:active {
+      background: #1565C0;
+    }
+    
+    .info-text {
+      font-size: 12px;
+      color: #999;
+      margin-top: 12px;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+  <h2>🔊 ずんだもん音声通知</h2>
+  
+  <div id="status" class="status info">
+    VOICEVOX接続確認中...
+  </div>
+  
+  <div class="toggle-container">
+    <span class="toggle-label">音声通知</span>
+    <label class="switch">
+      <input type="checkbox" id="enableToggle" checked>
+      <span class="slider"></span>
+    </label>
+  </div>
+  
+  <button class="test-button" id="testButton">
+    🎤 テスト再生
+  </button>
+  
+  <div class="info-text">
+    <strong>使用方法:</strong><br>
+    1. VOICEVOX Engineを起動<br>
+    2. claude.aiで会話開始<br>
+    3. Claudeの応答が自動で音声化
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>

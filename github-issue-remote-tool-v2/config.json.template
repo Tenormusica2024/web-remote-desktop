@@ -1,0 +1,14 @@
+{
+  "github_token": "YOUR_GITHUB_TOKEN_HERE",
+  "issues": [
+    {
+      "url": "https://github.com/owner/repository/issues/1",
+      "enabled": true
+    },
+    {
+      "url": "https://github.com/owner/repository/issues/2",
+      "enabled": true
+    }
+  ],
+  "poll_interval": 5
+}

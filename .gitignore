@@ -60,4 +60,4 @@ nul
 
 # Test files
 test_*.py
-debug_*.py
+debug_*.py.env_private

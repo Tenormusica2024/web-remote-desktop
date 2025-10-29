@@ -1,0 +1,74 @@
+## 🎯 Rev00145 CSS復元・ダウンロード項目削除完了報告
+
+### ✅ 完了内容
+
+#### 1. Dockerfile sed コマンド削除（Rev00234の上書き防止）
+問題: Dockerfile lines 28-35 に Rev00234 のsedコマンドが残っており、CSS修正を上書きしていた
+- 22px → 32px に変更
+- 12px → 16px に変更  
+- 6px → 8px に変更
+- opacity 0.9 → 1 に変更
+
+修正内容: sedコマンドを完全削除し、Rev00145の安定版CSS設定を維持
+
+#### 2. sound-platform-v4 デプロイ成功
+サービス: sound-platform-v4
+リビジョン: sound-platform-v4-00001-6fk
+URL: https://sound-platform-v4-ycqe3vmjva-an.a.run.app
+
+#### 3. CSS値検証（curl確認）
+.menu-button設定:
+- padding: 6px (Rev00145値)
+- font-size: 12px (統一済み)
+- width: 22px (Rev00145値)
+- height: 22px (Rev00145値)
+- opacity: 0.9 (Rev00145値)
+
+すべて正しく反映されていることを確認
+
+#### 4. ダウンロード項目削除検証
+curl確認結果: download-add-item 0件 (完全に削除済み)
+
+#### 5. Playwright実機確認結果
+メニューボタン表示:
+- width: 22px
+- height: 22px
+- padding: 6px
+- opacity: 0.9
+- visibility: visible
+
+メニュードロップダウン内容:
+1. プレイリストに追加
+2. トラック情報編集
+3. トラックを削除
+
+ダウンロード項目: なし（完全に削除済み）
+
+### 📊 期待される動作
+1. メニューボタン: Rev00145の安定した表示（width: 22px, opacity: 0.9）
+2. トラック外見切れ防止: ダウンロード項目削除により、メニュー項目数が減少し、トラック境界内に収まる
+3. フォントサイズ統一: 12pxに統一
+4. UI破壊なし: Rev00145をベースとしているため、サイドバー/メインのUI重なりなし
+
+### 🔧 修正ファイル
+1. Dockerfile - sed コマンド削除（lines 28-35）
+2. .build_cache_bust - Rev00145識別子に更新
+
+### 🚀 デプロイ情報
+- 元リビジョン: Rev00145-55w（最も安定）
+- 新サービス: sound-platform-v4
+- 新リビジョン: sound-platform-v4-00001-6fk
+- トラフィック: 100%
+
+### ✅ 検証完了項目
+- Dockerfile sedコマンド削除
+- CSS値が正しく反映（curl確認）
+- ダウンロード項目が削除（curl確認）
+- メニューボタン表示確認（Playwright実機確認）
+- メニュードロップダウン内容確認（ダウンロード項目なし）
+- UI破壊なし（スクリーンショット確認）
+
+### 📝 備考
+- Rev00145-55wの安定状態を完全に維持
+- Docker cache問題を新サービス名（v4）で回避
+- すべての修正がデプロイに正しく反映されていることを確認済み

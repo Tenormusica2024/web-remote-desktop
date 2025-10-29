@@ -9,7 +9,7 @@ import json
 
 # GitHub設定
 GITHUB_TOKEN = "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"
-GITHUB_REPO = "Tenormusica2024/web-remote-desktop"
+GITHUB_REPO = "Tenormusica2024/Private"
 API_BASE = "https://api.github.com"
 
 session = requests.Session()

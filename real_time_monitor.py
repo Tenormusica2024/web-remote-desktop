@@ -195,9 +195,9 @@ def monitor_loop():
                     body = comment["body"].strip().lower()
                     author = comment["user"]["login"]
                     
-                    # Check if this comment contains 'ss' and hasn't been processed
+                    # Check if this comment is exactly 'ss' (standalone) and hasn't been processed
                     if (comment_id not in processed_comments and 
-                        "ss" in body and 
+                        body == "ss" and 
                         not body.startswith("screenshot taken") and
                         not body.startswith("real-time screenshot")):
                         

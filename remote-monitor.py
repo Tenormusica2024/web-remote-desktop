@@ -178,10 +178,10 @@ def check_new_commands():
             created_at = comment.get("created_at", "")
             
             # スクリーンショット指示を検知（厳格な条件）
-            # 1. 「ss」を含む
+            # 1. 「ss」のみ（単独コメント）
             # 2. 自分のリプライではない（"screenshot taken"で始まらない）
             # 3. システムコメントではない（"Generated with Claude Code"を含まない）
-            if ("ss" in body and 
+            if (body == "ss" and 
                 not body.startswith("screenshot taken") and 
                 "generated with claude code" not in body and
                 "auto-captured in response" not in body):

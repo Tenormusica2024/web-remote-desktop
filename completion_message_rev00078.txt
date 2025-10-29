@@ -1,0 +1,62 @@
+Friend Shared Playlist Function - Complete Fix (Rev 00078)
+
+## Summary
+
+### Root Cause
+- script type="module" was executing in ES6 module scope
+- window.viewFriendPlaylistTracks assignment inside module did not expose function to global scope
+- onclick="window.viewFriendPlaylistTracks(...)" on playlist cards failed because function was undefined
+
+### Fix Applied
+**File**: templates/index.html
+**Line**: 3559
+
+**Before**: script type="module"
+**After**: script (removed type attribute)
+
+### Verification Results
+After Rev 00078 deployment, all friend-related functions are now available in global scope:
+- window.loadFriendsData -> function
+- window.acceptFriendRequest -> function
+- window.viewFriendProfile -> function
+- window.viewFriendPlaylists -> function
+- window.viewFriendPlaylistTracks -> function
+
+**Test**: typeof window.viewFriendPlaylistTracks
+**Result**: 'function' (was 'undefined' before fix)
+
+## Deployment Info
+- Revision: yt-transcript-00078-5gx
+- Deploy Time: 2025-10-03 08:58 UTC
+- Production URL: https://yt-transcript-ycqe3vmjva-an.a.run.app
+- Region: asia-northeast1
+
+## Testing Completed
+1. Friend screen access: OK
+2. Friend playlist screen display: OK (appears in front of sidebar)
+3. Playlist card onclick attribute: OK (correctly set)
+4. Global function availability: OK (all functions available)
+
+## Technical Details
+### ES6 Module Scope Issue
+- script tags with type="module" execute in isolated module scope
+- Variables and functions in modules are not exposed to global scope by default
+- window.xxx = yyy assignments may not work as expected in module scope
+
+### Solution
+- Removed type="module" attribute to run as normal script
+- This allows window.viewFriendPlaylistTracks = viewFriendPlaylistTracks to correctly expose function globally
+
+## User Impact
+Users can now:
+1. Click "Playlists (1)" button from friend list
+2. See friend's shared playlist screen
+3. Click playlist cards (e.g., MUSIC)
+4. View track list in the playlist
+5. Play tracks
+
+## Changes from Previous Session
+- Rev 00077: Added window. prefix to onclick attribute (no effect)
+- Rev 00078: Removed type="module" from script tag (root cause fixed)
+
+Fix completed. Users can now access friend shared playlists normally.

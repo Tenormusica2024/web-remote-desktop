@@ -9,10 +9,10 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parent
-load_dotenv(ROOT / ".env", override=True)
+load_dotenv(ROOT / ".env_private", override=True)
 
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-GITHUB_REPO = os.getenv("GITHUB_REPO", "Tenormusica2024/web-remote-desktop")
+GITHUB_REPO = os.getenv("GITHUB_REPO", "Tenormusica2024/Private")
 
 def check_latest_comments():
     """最新コメントの確認"""
@@ -36,8 +36,8 @@ def check_latest_comments():
             print(f"Latest {len(comments)} comments on Issue #1:")
             print("-" * 60)
             
-            # last_comment_id.txtの内容を読み取り
-            last_id_file = ROOT / "last_comment_id.txt"
+            # last_comment_id_private.txtの内容を読み取り
+            last_id_file = ROOT / "last_comment_id_private.txt"
             last_processed_id = 0
             if last_id_file.exists():
                 try:
@@ -64,9 +64,9 @@ def check_latest_comments():
                 print(f"    Date: {created_at}")
                 print(f"    Body: {body}")
                 
-                # 新しいコメントで「ss」を含むものをチェック
+                # 新しいコメントで「ss」のみのものをチェック
                 if (comment_id > last_processed_id and 
-                    "ss" in body.lower() and 
+                    body.lower().strip() == "ss" and 
                     not body.lower().startswith("screenshot taken")):
                     print(f"    >>> SHOULD TRIGGER SCREENSHOT <<<")
                 

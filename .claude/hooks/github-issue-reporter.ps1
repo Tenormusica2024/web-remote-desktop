@@ -11,10 +11,10 @@ param(
 )
 
 $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-$logFile = "$env:USERPROFILE\Documents\github-remote-desktop\logs\hook_execution.log"
+$logFile = "C:\Users\Tenormusica\Documents\github-remote-desktop\logs\hook_execution.log"
 
 # ログディレクトリ確認
-$logDir = Split-Path $logFile -Parent
+$logDir = "C:\Users\Tenormusica\Documents\github-remote-desktop\logs"
 if (-not (Test-Path $logDir)) {
     New-Item -ItemType Directory -Path $logDir -Force | Out-Null
 }

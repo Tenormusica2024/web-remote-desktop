@@ -1,25 +1,49 @@
-# ClaudeCode Remote Screenshot System
+# ClaudeCode Remote Desktop & Task Reporting System
 
-GitHub Issue 経由で遠隔スクリーンショット指示システム
+GitHub Issue 経由で遠隔スクリーンショット指示 + Claude Code タスク自動報告システム
 
 ## 🎯 システム概要
 
+### 1. 遠隔スクリーンショット機能
 - **社内PC** → GitHub Issue に「screenshot」コメント
 - **自宅PC** → コメント検知 → 自動スクリーンショット撮影・アップロード
 - **結果** → GitHub Issue に画像付きでレスポンス
 
+### 2. Claude Code タスク自動報告機能 (NEW)
+- **Claude Code** → タスク完了・質問・エラー時に自動報告
+- **GitHub Issue** → すべての状態変更がリアルタイムで記録
+- **報告漏れ防止** → Skills + Hooks + CLAUDE.md の3層構造で強制
+
 ## 📁 ファイル構成
 
 ```
-cc-snap-to-github/
+github-remote-desktop/
 ├── .env                       # 設定ファイル
+├── .env_private               # プライベートリポジトリ用設定
 ├── requirements.txt           # Python依存関係
+│
+├── # 遠隔スクリーンショット機能
 ├── pc-snap-uploader.py       # 手動ホットキー版
 ├── remote-monitor.py         # 遠隔監視サービス (メイン)
 ├── send-screenshot-command.py # 社内PC用指示送信
 ├── start_uploader.bat        # 手動版起動
 ├── start-remote-monitor.bat  # 遠隔監視開始
 ├── request-screenshot.bat    # 社内PC用(簡単操作)
+│
+├── # タスク報告機能
+├── task_complete_private.py  # GitHub Issue報告スクリプト
+├── task_complete_private.bat # バッチ起動用
+│
+├── # Claude Code Skills & Hooks (NEW)
+├── .claude/
+│   ├── skills/
+│   │   └── github-issue-reporter/
+│   │       ├── SKILL.md      # スキル定義（必須実行条件）
+│   │       ├── reference.md  # 詳細リファレンス
+│   │       └── examples.md   # 使用例（5パターン）
+│   └── hooks/
+│       └── github-issue-reporter.ps1  # セッション終了時Hook
+│
 └── README.md                 # このファイル
 ```
 
@@ -195,3 +219,181 @@ findstr "2024-01-15" monitor.log
 - **定期ヘルスチェック**: cron で定時スクリーンショット
 - **複数画面対応**: 特定モニタのみ撮影設定
 - **動画録画**: 連続スクリーンショットで簡易動画生成
+
+---
+
+## 🤖 Claude Code タスク自動報告システム
+
+### 概要
+
+Claude Codeのすべての重要なアクション（タスク完了、質問、エラー、待機など）をGitHub Issueに自動報告するシステム。
+従来のプロンプト方式では報告漏れが頻発していたため、**Skills + Hooks + CLAUDE.md の3層構造**で強制ルール化。
+
+### アーキテクチャ
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     3層報告強制システム                        │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  Layer 1: Skills (.claude/skills/github-issue-reporter/)   │
+│  ├── Claude Codeが自動認識するルール定義                      │
+│  ├── 必須実行トリガー6パターン                                │
+│  └── ZERO TOLERANCEポリシー                                 │
+│                                                             │
+│  Layer 2: Hooks (~/.claude/settings.json)                  │
+│  ├── Stop: セッション終了時に通知                            │
+│  └── SubagentStop: サブエージェント終了時に通知              │
+│                                                             │
+│  Layer 3: CLAUDE.md (プロジェクトルール)                     │
+│  ├── 毎回参照される強制ルール                                 │
+│  ├── Skillsへの参照リンク                                    │
+│  └── 必須実行タイミング定義                                  │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+                          ↓
+              GitHub Issue #5 (Private)
+                  自動報告投稿
+```
+
+### 必須報告タイミング（6パターン）
+
+| 状況 | 説明 | 報告内容例 |
+|------|------|-----------|
+| **完了** | タスクが正常に完了した時 | 実施内容、変更ファイル、コミット情報 |
+| **質問** | ユーザーに確認が必要な時 | 質問内容、理由、選択肢 |
+| **エラー** | 処理中にエラーが発生した時 | エラー詳細、試みた解決策、推奨アクション |
+| **待機** | 追加入力を待つ時 | 待機理由、必要な情報 |
+| **中断** | 作業を停止する時 | 中断理由、現在の状況 |
+| **情報** | 分析・調査結果を報告する時 | 発見事項、推奨事項 |
+
+### 使用方法
+
+#### 手動報告（Claude Code内で実行）
+
+```bash
+cd "C:\Users\Tenormusica\Documents\github-remote-desktop" && python task_complete_private.py "[報告内容]"
+```
+
+#### 報告フォーマット（マークダウン必須）
+
+```markdown
+## タスク完了: [タイトル]
+
+### 実施内容
+- 項目1
+- 項目2
+
+### 変更ファイル
+- `file1.py` - 説明
+- `file2.js` - 説明
+
+### 結果
+[結果の詳細]
+```
+
+### Skillsファイル詳細
+
+#### SKILL.md
+スキル定義ファイル。Claude Codeが自動的に認識し、報告ルールを適用。
+
+```yaml
+---
+name: github-issue-reporter
+description: |
+  GitHub Issue報告の自動実行スキル。タスク完了時、確認・質問時、
+  エラー発生時、待機時に必ずGitHub Issueへ報告する。
+allowed-tools: Bash, Read
+---
+```
+
+#### reference.md
+詳細リファレンス。全シナリオの報告内容・フォーマット・禁止事項を定義。
+
+#### examples.md
+5パターンの具体的な使用例（完了、質問、エラー、待機、情報提供）。
+
+### Hooks設定
+
+`~/.claude/settings.json` に以下を追加:
+
+```json
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -ExecutionPolicy Bypass -File \"C:\\Users\\Tenormusica\\Documents\\github-remote-desktop\\.claude\\hooks\\github-issue-reporter.ps1\" -Context \"Stop\""
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -ExecutionPolicy Bypass -File \"C:\\Users\\Tenormusica\\Documents\\github-remote-desktop\\.claude\\hooks\\github-issue-reporter.ps1\" -Context \"SubagentStop\""
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### ZERO TOLERANCE ポリシー
+
+以下は**完全禁止**:
+
+- 「後で報告する」→ 禁止
+- 「まとめて報告する」→ 禁止
+- 「報告しなくてもいいだろう」→ 禁止
+- 「質問だから報告不要」→ 禁止
+- 「エラーだから報告しない」→ 禁止
+
+### トラブルシューティング
+
+#### 報告が失敗する場合
+
+1. **ネットワークエラー**: 再試行する
+2. **認証エラー**: `.env_private` の GITHUB_TOKEN を確認
+3. **タイムアウト**: 報告内容を短くして再試行
+
+#### Hooks動作確認
+
+```bash
+# ログファイル確認
+type logs\hook_execution.log
+
+# 手動テスト
+powershell -ExecutionPolicy Bypass -File ".claude\hooks\github-issue-reporter.ps1" -Context "ManualTest"
+```
+
+### セットアップ手順
+
+1. **Skillsのコピー**
+   ```bash
+   # グローバル設定にコピー
+   xcopy /E /I ".claude\skills" "%USERPROFILE%\.claude\skills"
+   ```
+
+2. **settings.jsonの編集**
+   - `~/.claude/settings.json` にHooks設定を追加
+
+3. **CLAUDE.mdの確認**
+   - `Task Completion Report Protocol` セクションが存在することを確認
+
+4. **動作テスト**
+   ```bash
+   python task_complete_private.py "テスト報告"
+   ```
+
+### 更新履歴
+
+| 日付 | バージョン | 変更内容 |
+|------|-----------|---------|
+| 2025-12-25 | v2.0.0 | Skills & Hooks機能追加、3層報告強制システム実装 |
+| 2025-09-xx | v1.0.0 | 初期リリース（遠隔スクリーンショット機能） |

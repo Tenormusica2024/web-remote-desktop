@@ -395,5 +395,62 @@ powershell -ExecutionPolicy Bypass -File ".claude\hooks\github-issue-reporter.ps
 
 | 日付 | バージョン | 変更内容 |
 |------|-----------|---------|
+| 2025-12-29 | v2.1.0 | PC起動時自動実行設定を追加 |
 | 2025-12-25 | v2.0.0 | Skills & Hooks機能追加、3層報告強制システム実装 |
 | 2025-09-xx | v1.0.0 | 初期リリース（遠隔スクリーンショット機能） |
+
+---
+
+## 🔄 PC起動時自動実行設定
+
+### 概要
+
+`private_issue_monitor_service.py` をPC起動時に自動的にバックグラウンドで実行する設定。
+
+### 設定方法
+
+1. **VBSファイルの配置**
+
+以下の内容で VBS ファイルをスタートアップフォルダに配置：
+
+**ファイルパス:** `C:\Users\Tenormusica\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\private_issue_monitor.vbs`
+
+```vbs
+Set objShell = CreateObject("WScript.Shell")
+objShell.CurrentDirectory = "C:\Users\Tenormusica\Documents\github-remote-desktop"
+objShell.Run "pythonw.exe private_issue_monitor_service.py", 0, False
+```
+
+2. **動作確認**
+
+```bash
+# プロセス確認
+tasklist | findstr pythonw
+
+# 手動起動テスト
+wscript "C:\Users\Tenormusica\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\private_issue_monitor.vbs"
+```
+
+### 技術詳細
+
+- **pythonw.exe**: コンソールウィンドウを表示しないPython実行ファイル
+- **Run の第2引数 `0`**: ウィンドウを非表示で実行
+- **Run の第3引数 `False`**: スクリプト終了を待たない（非同期実行）
+
+### 停止方法
+
+```bash
+# プロセス終了
+taskkill /f /im pythonw.exe
+```
+
+### トラブルシューティング
+
+1. **起動しない場合**
+   - Pythonのパスが通っているか確認
+   - `pythonw.exe` が存在するか確認
+   - VBSファイルのパスが正しいか確認
+
+2. **エラー確認**
+   - 手動でVBSファイルを実行してエラーを確認
+   - `python private_issue_monitor_service.py` を直接実行してエラーを確認

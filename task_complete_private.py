@@ -2,8 +2,9 @@
 # -*- coding: utf-8 -*-
 """
 タスク完了報告 - GitHub Issue自動投稿スクリプト (PRIVATE REPOSITORY VERSION)
-Claude Codeの作業完了をGitHub Issue #1に自動報告
+Claude Codeの作業完了をGitHub Issueに自動報告
 Private repository support with enhanced authentication
+v4: セキュリティ強化、UTF8NoBOM対応、Issue番号動的化
 """
 
 import requests
@@ -21,19 +22,28 @@ try:
     # Fallback to standard .env if private config not found
     if not os.getenv("GITHUB_TOKEN"):
         load_dotenv(ROOT / ".env", override=True)
-except:
+except ImportError:
+    # python-dotenv not installed - rely on environment variables
     pass
+except Exception as e:
+    # .env file loading failed - rely on environment variables
+    print(f"Warning: Failed to load .env file: {e}", file=sys.stderr)
 
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "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")
+# トークンは環境変数または.envファイルから取得（ハードコード禁止）
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+if not GITHUB_TOKEN:
+    print("ERROR: GITHUB_TOKEN not found in environment or .env file")
+    print("Please set GITHUB_TOKEN in .env_private or .env file")
+    sys.exit(1)
 GITHUB_REPO = os.getenv("GITHUB_REPO", "Tenormusica2024/Private")
-MONITOR_ISSUE = os.getenv("MONITOR_ISSUE_NUMBER", "1")
+MONITOR_ISSUE = os.getenv("MONITOR_ISSUE_NUMBER", "5")
 
 API_BASE = "https://api.github.com"
 
 def post_completion_comment(custom_message=None):
     """
-    GitHub Issue #1にタスク報告コメントを投稿
-    
+    GitHub Issue（MONITOR_ISSUE番号）にタスク報告コメントを投稿
+
     システムプロンプト:
     - 必ずマークダウン形式で投稿する
     - タスク完了時だけでなく、終了時・停止時・待機時・エラー時も報告する
@@ -47,10 +57,10 @@ def post_completion_comment(custom_message=None):
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         if custom_message:
-            # 改行を保持しながらマークダウン形式に変換
-            # \nは\n\nに変換（GitHub Markdownの段落区切り）
-            formatted_message = custom_message.replace("\n", "\n\n")
-            
+            # メッセージをそのまま使用（改行の二重化はコードブロックを壊すため削除）
+            # GitHub Markdownは元の改行を適切に処理する
+            formatted_message = custom_message
+
             # マークダウン形式で整形された報告を作成
             body = f"""## 🤖 タスク報告
 
@@ -77,7 +87,7 @@ def post_completion_comment(custom_message=None):
         
         if response.status_code in (200, 201):
             comment_data = response.json()
-            print(f"OK Task report posted to GitHub Issue #1")
+            print(f"OK Task report posted to GitHub Issue #{MONITOR_ISSUE}")
             print(f"Comment URL: {comment_data.get('html_url', 'N/A')}")
             print(f"Posted at: {timestamp}")
             return True
@@ -94,34 +104,51 @@ def main():
     # UTF-8エンコーディング設定（Windows環境対応）
     import sys
     import io
+    import argparse
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
-    
+
     print("=" * 50)
     print("Claude Code Task Report System")
     print("=" * 50)
-    
-    # Command line arguments for custom message
-    if len(sys.argv) > 1:
-        custom_message = " ".join(sys.argv[1:])
-        print(f"Custom message: {custom_message[:100]}...")  # 最初の100文字のみ表示
+
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Post task report to GitHub Issue')
+    parser.add_argument('message', nargs='*', help='Custom message to post')
+    parser.add_argument('--file', '-f', type=str, help='Read message from file (for special characters)')
+    args = parser.parse_args()
+
+    # Determine custom message
+    custom_message = None
+    if args.file:
+        # ファイルから読み取り（特殊文字対応）
+        try:
+            with open(args.file, 'r', encoding='utf-8') as f:
+                custom_message = f.read()
+            print(f"Custom message from file: {custom_message[:100]}...")
+        except Exception as e:
+            print(f"Error reading file: {e}")
+            sys.exit(1)
+    elif args.message:
+        custom_message = " ".join(args.message)
+        print(f"Custom message: {custom_message[:100]}...")
     else:
-        custom_message = None
         print("Using standard report message")
-    
+
     print(f"Target: {GITHUB_REPO} Issue #{MONITOR_ISSUE}")
     print(f"Execution time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print()
-    
+
     # Execute GitHub Issue post
     success = post_completion_comment(custom_message)
-    
+
     print()
     if success:
         print("OK Task report posted successfully!")
     else:
         print("NG Task report failed.")
-    
+        sys.exit(1)
+
     print("=" * 50)
 
 if __name__ == "__main__":

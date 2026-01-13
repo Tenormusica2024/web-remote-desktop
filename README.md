@@ -222,33 +222,34 @@ findstr "2024-01-15" monitor.log
 
 ---
 
-## 🤖 Claude Code タスク自動報告システム
+## 🤖 Claude Code タスク自動報告システム（v4.1 Final）
 
 ### 概要
 
-Claude Codeのすべての重要なアクション（タスク完了、質問、エラー、待機など）をGitHub Issueに自動報告するシステム。
-従来のプロンプト方式では報告漏れが頻発していたため、**Skills + Hooks + CLAUDE.md の3層構造**で強制ルール化。
+Claude Codeのすべての重要なアクション（タスク完了、質問、エラー、待機など）をGitHub Issue #5に自動報告するシステム。
+**即時報告（メイン）+ UserPromptSubmitフック（バックアップ）のハイブリッド方式**で報告漏れを防止。
 
-### アーキテクチャ
+### アーキテクチャ（v4.1）
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                     3層報告強制システム                        │
+│            ハイブリッド報告システム（v4.1 Final）               │
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
-│  Layer 1: Skills (.claude/skills/github-issue-reporter/)   │
-│  ├── Claude Codeが自動認識するルール定義                      │
+│  Main: 即時報告（Bash実行）                                   │
+│  ├── task_complete_private.py でGitHub API直接投稿          │
+│  ├── 環境変数必須化（セキュリティ強化）                        │
+│  └── Issue番号動的表示（#{MONITOR_ISSUE}）                   │
+│                                                             │
+│  Backup: UserPromptSubmitフック                             │
+│  ├── pending_report.txt の検出・投稿                         │
+│  ├── プレースホルダー検出 → Claude通知                        │
+│  ├── GUIDサフィックス（衝突回避）                             │
+│  └── UTF8NoBOM（エンコーディング問題解消）                     │
+│                                                             │
+│  Skills & CLAUDE.md（ルール定義）                            │
 │  ├── 必須実行トリガー6パターン                                │
 │  └── ZERO TOLERANCEポリシー                                 │
-│                                                             │
-│  Layer 2: Hooks (~/.claude/settings.json)                  │
-│  ├── Stop: セッション終了時に通知                            │
-│  └── SubagentStop: サブエージェント終了時に通知              │
-│                                                             │
-│  Layer 3: CLAUDE.md (プロジェクトルール)                     │
-│  ├── 毎回参照される強制ルール                                 │
-│  ├── Skillsへの参照リンク                                    │
-│  └── 必須実行タイミング定義                                  │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
                           ↓
@@ -313,29 +314,19 @@ allowed-tools: Bash, Read
 #### examples.md
 5パターンの具体的な使用例（完了、質問、エラー、待機、情報提供）。
 
-### Hooks設定
+### Hooks設定（v4.1）
 
 `~/.claude/settings.json` に以下を追加:
 
 ```json
 {
   "hooks": {
-    "Stop": [
+    "UserPromptSubmit": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "powershell -ExecutionPolicy Bypass -File \"C:\\Users\\Tenormusica\\Documents\\github-remote-desktop\\.claude\\hooks\\github-issue-reporter.ps1\" -Context \"Stop\""
-          }
-        ]
-      }
-    ],
-    "SubagentStop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "powershell -ExecutionPolicy Bypass -File \"C:\\Users\\Tenormusica\\Documents\\github-remote-desktop\\.claude\\hooks\\github-issue-reporter.ps1\" -Context \"SubagentStop\""
+            "command": "powershell -ExecutionPolicy Bypass -File \"C:\\Users\\Tenormusica\\Documents\\github-remote-desktop\\.claude\\hooks\\auto-report-previous-response.ps1\""
           }
         ]
       }
@@ -343,6 +334,12 @@ allowed-tools: Bash, Read
   }
 }
 ```
+
+**v4.1の改善点:**
+- **GUIDサフィックス**: 一時ファイル名に8文字のランダムGUID追加（衝突回避）
+- **UTF8NoBOM**: BOMなしUTF8で書き込み（Python読み取りエラー回避）
+- **Claude通知**: Write-Host出力がsystem-reminderとして表示
+- **Issue番号動的化**: `#{MONITOR_ISSUE}` で環境変数から取得
 
 ### ZERO TOLERANCE ポリシー
 
@@ -395,6 +392,10 @@ powershell -ExecutionPolicy Bypass -File ".claude\hooks\github-issue-reporter.ps
 
 | 日付 | バージョン | 変更内容 |
 |------|-----------|---------|
+| 2026-01-13 | v4.1.0 | Issue番号動的化、例外処理改善、バージョンコメント統一 |
+| 2026-01-13 | v4.0.0 | GUIDサフィックス追加、UTF8NoBOM対応、セキュリティ強化 |
+| 2026-01-13 | v3.0.0 | Claude通知機能追加（Write-Host）、ファイルベース引数渡し |
+| 2026-01-13 | v2.2.0 | プレースホルダー検出機能追加、ハイブリッド方式導入 |
 | 2025-12-29 | v2.1.0 | PC起動時自動実行設定を追加 |
 | 2025-12-25 | v2.0.0 | Skills & Hooks機能追加、3層報告強制システム実装 |
 | 2025-09-xx | v1.0.0 | 初期リリース（遠隔スクリーンショット機能） |

@@ -1,0 +1,137 @@
+# 汎用CI/CDワークフロー - 言語自動検出型
+# PR時のみ自動実行 / 手動実行可能
+name: CI
+
+on:
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:  # 手動実行ボタン
+
+# セキュリティ: 最小権限
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  detect-language:
+    runs-on: ubuntu-latest
+    outputs:
+      python: ${{ steps.detect.outputs.python }}
+      javascript: ${{ steps.detect.outputs.javascript }}
+      typescript: ${{ steps.detect.outputs.typescript }}
+      html: ${{ steps.detect.outputs.html }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect languages
+        id: detect
+        run: |
+          echo "python=$(find . -name '*.py' -not -path './.*' | head -1 | wc -l | xargs)" >> $GITHUB_OUTPUT
+          echo "javascript=$(find . -name '*.js' -not -path './node_modules/*' -not -path './.*' | head -1 | wc -l | xargs)" >> $GITHUB_OUTPUT
+          echo "typescript=$(find . -name '*.ts' -not -path './node_modules/*' -not -path './.*' | head -1 | wc -l | xargs)" >> $GITHUB_OUTPUT
+          echo "html=$(find . -name '*.html' -not -path './.*' | head -1 | wc -l | xargs)" >> $GITHUB_OUTPUT
+
+  # Python プロジェクト用
+  python-lint:
+    needs: detect-language
+    if: needs.detect-language.outputs.python == '1'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Ruff
+        run: pip install ruff
+
+      - name: Run Ruff (Lint + Format check)
+        run: |
+          ruff check . --output-format=github || true
+          ruff format --check . || true
+
+  # JavaScript プロジェクト用
+  javascript-lint:
+    needs: detect-language
+    if: needs.detect-language.outputs.javascript == '1' || needs.detect-language.outputs.typescript == '1'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Check for package.json
+        id: check-package
+        run: |
+          if [ -f "package.json" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Install dependencies
+        if: steps.check-package.outputs.exists == 'true'
+        run: npm ci --ignore-scripts || npm install --ignore-scripts
+        continue-on-error: true
+
+      - name: Run ESLint (if configured)
+        if: steps.check-package.outputs.exists == 'true'
+        run: npx eslint . --ext .js,.jsx,.ts,.tsx --max-warnings 0 || true
+        continue-on-error: true
+
+  # HTML プロジェクト用
+  html-lint:
+    needs: detect-language
+    if: needs.detect-language.outputs.html == '1'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install HTMLHint
+        run: npm install -g htmlhint
+
+      - name: Run HTMLHint
+        run: htmlhint "**/*.html" --ignore "**/node_modules/**" || true
+        continue-on-error: true
+
+  # セキュリティスキャン（全プロジェクト共通）
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'table'
+          exit-code: '0'  # 脆弱性があっても失敗しない（警告のみ）
+          ignore-unfixed: true
+          severity: 'CRITICAL,HIGH'
+
+  # 結果サマリー
+  summary:
+    needs: [detect-language, security-scan]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: CI Summary
+        run: |
+          echo "## CI Results" >> $GITHUB_STEP_SUMMARY
+          echo "- Python detected: ${{ needs.detect-language.outputs.python }}" >> $GITHUB_STEP_SUMMARY
+          echo "- JavaScript detected: ${{ needs.detect-language.outputs.javascript }}" >> $GITHUB_STEP_SUMMARY
+          echo "- TypeScript detected: ${{ needs.detect-language.outputs.typescript }}" >> $GITHUB_STEP_SUMMARY
+          echo "- HTML detected: ${{ needs.detect-language.outputs.html }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "CI completed at $(date)" >> $GITHUB_STEP_SUMMARY

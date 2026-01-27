@@ -18,18 +18,68 @@ import json
 import subprocess
 import datetime
 from pathlib import Path
+from typing import Dict, List, Optional, Any
 
 # Windows環境でのUTF-8出力を確実にする
 if sys.platform == 'win32':
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='ignore')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='ignore')
 
-# 設定
-GITHUB_OWNER = "Tenormusica2024"
-GITHUB_REPO = "Private"
-ISSUE_NUMBER = 5
-CHECK_INTERVAL = 30  # 30秒ごとにチェック
-WAIT_THRESHOLD = 120  # 2分応答なしで自動報告
+# 設定ファイルを読み込む
+CONFIG_FILE = Path(__file__).parent / "config.json"
+
+def load_config() -> Dict[str, Any]:
+    """設定ファイルを読み込む（デフォルト値付き）"""
+    default_config = {
+        "monitoring": {
+            "check_interval_seconds": 30,
+            "wait_threshold_seconds": 120,
+            "max_auto_reported_ids": 10,
+            "old_message_threshold_hours": 1
+        },
+        "github": {
+            "owner": "Tenormusica2024",
+            "repo": "Private",
+            "issue_number": 5
+        },
+        "logging": {
+            "enable_debug": True,
+            "log_api_responses": False,
+            "log_detailed_timing": True
+        },
+        "performance": {
+            "enable_comment_caching": True,
+            "max_comment_history": 50
+        }
+    }
+    
+    if CONFIG_FILE.exists():
+        try:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                config = json.load(f)
+                # デフォルト設定をマージ
+                for section, values in default_config.items():
+                    if section not in config:
+                        config[section] = values
+                    else:
+                        for key, default_value in values.items():
+                            if key not in config[section]:
+                                config[section][key] = default_value
+                return config
+        except Exception as e:
+            log(f"設定ファイル読み込みエラー（デフォルト値使用）: {e}")
+    
+    return default_config
+
+# 設定をロード
+config = load_config()
+GITHUB_OWNER = config["github"]["owner"]
+GITHUB_REPO = config["github"]["repo"]
+ISSUE_NUMBER = config["github"]["issue_number"]
+CHECK_INTERVAL = config["monitoring"]["check_interval_seconds"]
+WAIT_THRESHOLD = config["monitoring"]["wait_threshold_seconds"]
+MAX_AUTO_REPORTED_IDS = config["monitoring"]["max_auto_reported_ids"]
+OLD_MESSAGE_THRESHOLD_HOURS = config["monitoring"]["old_message_threshold_hours"]
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
 
 # ログファイル
@@ -44,29 +94,55 @@ AUTO_REPORT_HISTORY = Path(__file__).parent / ".auto_report_history.json"
 PENDING_MESSAGE_FILE = Path(__file__).parent / "pending_claude_message.txt"
 
 
-def log(message):
-    """ログ出力"""
-    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    log_entry = f"[{timestamp}] {message}"
+def log(message: str, level: str = "INFO") -> None:
+    """詳細ログ出力（レベル・実行時間付き）"""
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    log_entry = f"[{timestamp}] [{level:5s}] {message}"
     print(log_entry)
     
-    with open(LOG_FILE, "a", encoding="utf-8") as f:
-        f.write(log_entry + "\n")
+    try:
+        with open(LOG_FILE, "a", encoding="utf-8", errors="ignore") as f:
+            f.write(log_entry + "\n")
+    except Exception as e:
+        print(f"ログ書き込みエラー: {e}")
+
+def debug_log(message: str) -> None:
+    """デバッグログ（設定で無効化可能）"""
+    if config["logging"]["enable_debug"]:
+        log(message, "DEBUG")
+
+def error_log(message: str) -> None:
+    """エラーログ"""
+    log(message, "ERROR")
 
 
-def load_state():
-    """状態ファイルの読み込み"""
+def load_state() -> Dict[str, Any]:
+    """
+    状態ファイルの読み込み
+    
+    Returns:
+        Dict[str, Any]: サブエージェントの状態情報
+            - last_claude_message_id: 最後に処理したClaude Code宛メッセージID
+            - pending_response: 現在応答待ちのメッセージ情報
+            - monitor_started: 監視開始時刻
+            - auto_reported_ids: 自動報告済みメッセージIDリスト
+    """
     if STATE_FILE.exists():
         try:
             with open(STATE_FILE, "r", encoding="utf-8") as f:
-                state = json.load(f)
-                # auto_reported_ids が10個を超えたら古いものから削除
-                if "auto_reported_ids" in state and len(state["auto_reported_ids"]) > 10:
-                    state["auto_reported_ids"] = state["auto_reported_ids"][-10:]
-                    log(f"auto_reported_ids を整理（最新10件を保持）")
-                return state
-        except:
-            pass
+                state_data = json.load(f)
+                # auto_reported_ids が設定上限を超えたら古いものから削除
+                max_ids = config["monitoring"]["max_auto_reported_ids"]
+                if "auto_reported_ids" in state_data and len(state_data["auto_reported_ids"]) > max_ids:
+                    state_data["auto_reported_ids"] = state_data["auto_reported_ids"][-max_ids:]
+                    log(f"auto_reported_ids を整理（最新{max_ids}件を保持）")
+                return state_data
+        except json.JSONDecodeError as e:
+            error_log(f"状態ファイルJSONパースエラー: {e}")
+        except IOError as e:
+            error_log(f"状態ファイル読み込みエラー: {e}")
+        except Exception as e:
+            error_log(f"予期しない状態ファイルエラー: {e}")
     return {
         "last_claude_message_id": None,
         "pending_response": None,
@@ -75,14 +151,28 @@ def load_state():
     }
 
 
-def save_state(state):
-    """状態ファイルの保存"""
-    with open(STATE_FILE, "w", encoding="utf-8") as f:
-        json.dump(state, f, indent=2)
+def save_state(state_data: Dict[str, Any]) -> None:
+    """
+    状態ファイルの保存
+    
+    Args:
+        state_data: 保存する状態データ
+    """
+    try:
+        with open(STATE_FILE, "w", encoding="utf-8") as f:
+            json.dump(state_data, f, indent=2)
+        debug_log(f"状態ファイル保存成功: {STATE_FILE}")
+    except Exception as e:
+        error_log(f"状態ファイル保存エラー: {e}")
 
 
-def get_issue_comments():
-    """GitHub Issue #5のコメントを取得"""
+def get_issue_comments() -> List[Dict[str, Any]]:
+    """
+    GitHub Issue #5のコメントを取得
+    
+    Returns:
+        List[Dict[str, Any]]: コメントリスト（取得失敗時は空リスト）
+    """
     try:
         # PowerShellラッパー経由でGitHub CLIを実行
         wrapper_path = Path(__file__).parent / "github-issue-monitor-wrapper.ps1"
@@ -269,8 +359,17 @@ def monitor_loop():
                 time.sleep(CHECK_INTERVAL)
                 continue
             
-            # 最新のコメントから順にチェック
-            comments_sorted = sorted(comments, key=lambda x: x['created_at'], reverse=True)
+            # パフォーマンス最適化: コメント履歴を制限してメモリ節約
+            max_history = config["performance"]["max_comment_history"]
+            if len(comments) > max_history:
+                debug_log(f"コメント履歴を{max_history}件に制限（元: {len(comments)}件）")
+                # 最新のコメントのみ保持（created_atでソート後の上位を取得）
+                comments = sorted(comments, key=lambda x: x['created_at'], reverse=True)[:max_history]
+            else:
+                # 通常のソート
+                comments = sorted(comments, key=lambda x: x['created_at'], reverse=True)
+            
+            comments_sorted = comments
             
             log(f"コメント数: {len(comments)}件")
             
@@ -290,13 +389,17 @@ def monitor_loop():
                     created_at = datetime.datetime.fromisoformat(comment['created_at'].replace('Z', '+00:00'))
                     elapsed = (datetime.datetime.now(datetime.timezone.utc) - created_at).total_seconds()
                     
-                    # 古すぎるメッセージはスキップ（1時間以上前）
-                    if elapsed > 3600:  # 1時間 = 3600秒
-                        log(f"  古すぎるメッセージをスキップ: ID={comment_id}, 経過={elapsed/60:.1f}分")
+                    # 設定可能な古いメッセージ闾値を使用
+                    threshold_seconds = config["monitoring"]["old_message_threshold_hours"] * 3600
+                    if elapsed > threshold_seconds:
+                        debug_log(f"  古すぎるメッセージをスキップ: ID={comment_id}, 経過={elapsed/60:.1f}分")
                         continue
                     
-                    log(f"Claude Code宛メッセージ検出: ID={comment_id}, 経過={elapsed:.0f}秒")
-                    log(f"  送信者: {comment['user']['login']}, 時刻: {comment['created_at']}")
+                    if config["logging"]["log_detailed_timing"]:
+                        log(f"Claude Code宛メッセージ検出: ID={comment_id}, 経過={elapsed:.0f}秒")
+                        debug_log(f"  送信者: {comment['user']['login']}, 時刻: {comment['created_at']}")
+                    else:
+                        log(f"Claude Code宛メッセージ検出: ID={comment_id}")
                     
                     # 最新の新しいメッセージとして記録（1つだけ）
                     if latest_new_message is None:
@@ -312,7 +415,7 @@ def monitor_loop():
             
             # 新しいメッセージが見つかった場合、最新の1つだけをpending_responseに設定
             if latest_new_message:
-                log(f"  最新メッセージを応答待ちに設定: ID={latest_new_message['id']}")
+                debug_log(f"  最新メッセージを応答待ちに設定: ID={latest_new_message['id']}")
                 state["pending_response"] = latest_new_message
                 save_state(state)
             
@@ -330,7 +433,7 @@ def monitor_loop():
                         save_state(state)
                     else:
                         # pending_responseがない場合は単にClaude応答を検出
-                        log(f"Claude Code応答を検出（ID={comment['id']}）")
+                        debug_log(f"Claude Code応答を検出（ID={comment['id']}）")
                     break
             
             # 応答待ちチェック

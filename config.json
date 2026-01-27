@@ -1,0 +1,22 @@
+{
+  "monitoring": {
+    "check_interval_seconds": 30,
+    "wait_threshold_seconds": 120,
+    "max_auto_reported_ids": 10,
+    "old_message_threshold_hours": 1
+  },
+  "github": {
+    "owner": "Tenormusica2024",
+    "repo": "Private",
+    "issue_number": 5
+  },
+  "logging": {
+    "enable_debug": true,
+    "log_api_responses": false,
+    "log_detailed_timing": true
+  },
+  "performance": {
+    "enable_comment_caching": true,
+    "max_comment_history": 50
+  }
+}

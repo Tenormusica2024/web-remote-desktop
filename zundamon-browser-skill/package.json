@@ -1,0 +1,25 @@
+{
+  "name": "zundamon-voice-vrm-bridge",
+  "version": "1.1.0",
+  "description": "VRM WebSocket Bridge Server for Zundamon Voice extension",
+  "main": "vrm-bridge-server.js",
+  "scripts": {
+    "start": "node vrm-bridge-server.js",
+    "bridge": "node vrm-bridge-server.js",
+    "test": "node test-vrm-bridge.js"
+  },
+  "keywords": [
+    "vrm",
+    "vseeFace",
+    "voicevox",
+    "websocket",
+    "osc",
+    "vmc"
+  ],
+  "author": "Tenormusica",
+  "license": "MIT",
+  "dependencies": {
+    "ws": "^8.18.0",
+    "osc": "^2.4.5"
+  }
+}

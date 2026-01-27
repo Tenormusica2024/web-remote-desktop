@@ -42,7 +42,7 @@ class UnifiedMonitorConfig:
         # デフォルト設定
         self.repo_owner = "Tenormusica2024"
         self.repo_name = "Private"
-        self.issue_number = 1
+        self.issue_number = 5
         self.poll_interval = 5  # 秒
         self.github_token = None
         

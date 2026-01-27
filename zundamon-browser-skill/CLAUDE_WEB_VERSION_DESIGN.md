@@ -4,9 +4,10 @@
 
 **プロジェクト名:** Zundamon Voice for Claude (Browser Extension)  
 **対象:** Claude AI Web版 (https://claude.ai/)  
-**目的:** Claude AIの応答を検出し、ずんだもん音声で自動読み上げ  
+**目的:** Claude AIの応答を検出し、ずんだもん音声で自動読み上げ + Live2D/VRM口パク連携  
 **作成日:** 2025-10-28  
-**バージョン:** 1.0
+**最終更新:** 2025-01-02  
+**バージョン:** 1.1.0
 
 ---
 
@@ -27,6 +28,23 @@
 - コードブロック・ツール実行結果の除外
 - UIボタンテキストの除外
 
+### 4. VTubeStudio Live2D口パク連携（v1.1.0）
+- WebSocket API経由でVTubeStudioと通信（localhost:8001）
+- リアルタイム音量解析による口パクアニメーション
+- 自動認証・トークン管理
+- 自動再接続機能（5秒インターバル）
+
+### 5. VRM連携機能（v1.1.0）
+- VMC Protocol経由でVRMモデルと連携（VSeeFace等）
+- WebSocket Bridge Server（Node.js）経由でOSC通信
+- ISOLATED/MAIN World通信ブリッジ実装
+- アニメ風口パクアルゴリズム（8フレームごとに開閉切り替え）
+
+### 6. パフォーマンス最適化（v1.0.0-v1.1.0）
+- 並列プリフェッチ（最大5チャンク同時）
+- 最初のメッセージまで約0.5-1.5秒（従来比2秒短縮）
+- チャンク間待機時間ほぼゼロ（キャッシュヒット時）
+
 ---
 
 ## 🏗️ アーキテクチャ
@@ -34,38 +52,51 @@
 ### コンポーネント構成
 
 ```
-┌─────────────────────────────────────────┐
-│         Claude AI Web Interface         │
-│         (https://claude.ai/)            │
-└────────────────┬────────────────────────┘
-                 │ DOM Mutation
-                 ↓
-┌─────────────────────────────────────────┐
-│          Content Script                  │
-│         (content.js)                     │
-│                                          │
-│  - MutationObserver監視                 │
-│  - 応答検出・テキスト抽出                │
-│  - ストリーミング完了待機                │
-└────────────────┬────────────────────────┘
-                 │ chrome.runtime.sendMessage
-                 ↓
-┌─────────────────────────────────────────┐
-│      Background Service Worker          │
-│        (background.js)                   │
-│                                          │
-│  - CORS回避のためのプロキシ              │
-│  - VOICEVOX API呼び出し                 │
-└────────────────┬────────────────────────┘
-                 │ HTTP Request
-                 ↓
-┌─────────────────────────────────────────┐
-│         VOICEVOX Engine                  │
-│      (http://localhost:50021)            │
-│                                          │
-│  - 音声クエリ生成                        │
-│  - 音声合成                              │
-└─────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│              Claude AI Web Interface                        │
+│              (https://claude.ai/)                           │
+└──────────────────┬──────────────────────────────────────────┘
+                   │ DOM Mutation
+                   ↓
+┌────────────────────────────────────────────────────────────┐
+│         Content Script (ISOLATED World)                    │
+│              (content.js)                                  │
+│                                                            │
+│  - MutationObserver監視                                   │
+│  - 応答検出・テキスト抽出                                  │
+│  - 並列プリフェッチ（最大5チャンク）                       │
+│  - 音声再生 + 音量解析                                     │
+└──────┬─────────────────────────────────┬─────────────────┘
+       │ chrome.runtime.sendMessage       │ postMessage
+       ↓                                  ↓
+┌─────────────────────────┐  ┌──────────────────────────────┐
+│  Background Service     │  │  MAIN World Script            │
+│  Worker                 │  │  (vts-connector.js,           │
+│  (background.js)        │  │   vrm-connector.js,           │
+│                         │  │   vrm-bridge.js)              │
+│  - CORS回避プロキシ     │  │                               │
+│  - VOICEVOX API呼び出し │  │  - VTubeStudio WebSocket連携 │
+│  - ping/pong機構        │  │  - VRM VMC Protocol連携      │
+└────────┬────────────────┘  │  - postMessageリレー         │
+         │                    └──────┬───────────────────────┘
+         │ HTTP Request              │ WebSocket/OSC
+         ↓                           ↓
+┌─────────────────────┐    ┌─────────────────────────────┐
+│  VOICEVOX Engine    │    │  VTubeStudio / VSeeFace    │
+│  (localhost:50021)  │    │  (localhost:8001/39540)    │
+│                     │    │                             │
+│  - 音声クエリ生成   │    │  - Live2D口パク制御        │
+│  - 音声合成         │    │  - VRM口パク制御           │
+└─────────────────────┘    └─────────────────────────────┘
+         ↓
+┌─────────────────────┐
+│  WebSocket Bridge   │
+│  Server (Node.js)   │
+│  (localhost:8765)   │
+│                     │
+│  - WebSocket受信    │
+│  - OSC送信          │
+└─────────────────────┘
 ```
 
 ---
@@ -75,14 +106,20 @@
 ```
 zundamon-browser-skill/
 ├── manifest.json          # Chrome拡張機能マニフェスト（Manifest V3）
-├── content.js             # コンテントスクリプト（メイン処理）
+├── content.js             # コンテントスクリプト（ISOLATED World）
+├── vts-connector.js       # VTubeStudio WebSocket連携（MAIN World）
+├── vrm-connector.js       # VRM VMC Protocol連携（MAIN World）
+├── vrm-bridge.js          # ISOLATED/MAIN World通信ブリッジ（MAIN World）
 ├── background.js          # バックグラウンドサービスワーカー
+├── bridge-server.js       # WebSocket-OSC Bridge Server（Node.js）
 ├── popup.html             # 拡張機能ポップアップUI
 ├── popup.js               # ポップアップUI制御
+├── package.json           # Node.js依存関係（ws, osc）
 ├── icon16.png             # 拡張機能アイコン（16x16）
 ├── icon48.png             # 拡張機能アイコン（48x48）
 ├── icon128.png            # 拡張機能アイコン（128x128）
-└── README.md              # プロジェクト概要・インストール手順
+├── README.md              # プロジェクト概要・インストール手順
+└── CLAUDE_WEB_VERSION_DESIGN.md  # 本ファイル（詳細設計書）
 ```
 
 ---
@@ -94,33 +131,47 @@ zundamon-browser-skill/
 **Manifest Version:** V3  
 **必須パーミッション:**
 - `storage` - 設定保存用
-- `activeTab` - アクティブタブへのアクセス
+- `webRequest` - リクエスト監視用
 
 **Host Permissions:**
 - `https://claude.ai/*` - Claude AIサイトへのアクセス
 - `http://localhost:50021/*` - VOICEVOX APIへのアクセス
 
+**Content Scripts:**
+- **MAIN World**: `vts-connector.js`, `vrm-connector.js`, `vrm-bridge.js`
+  - ページの`window`オブジェクトに直接アクセス可能
+  - VTubeStudio/VRM連携の実装
+- **ISOLATED World**: `content.js`
+  - Chrome拡張機能APIにアクセス可能
+  - VOICEVOX音声合成・再生制御
+
 ```json
 {
   "manifest_version": 3,
   "name": "Zundamon Voice for Claude",
-  "version": "1.0",
-  "description": "Claude AIの応答をずんだもん音声で読み上げ",
-  "permissions": ["storage", "activeTab"],
+  "version": "1.0.0",
+  "description": "Claude AIの応答をずんだもん音声で読み上げるChrome拡張機能",
+  "permissions": ["storage", "webRequest"],
   "host_permissions": [
     "https://claude.ai/*",
     "http://localhost:50021/*"
   ],
-  "background": {
-    "service_worker": "background.js"
-  },
   "content_scripts": [
+    {
+      "matches": ["https://claude.ai/*"],
+      "js": ["vts-connector.js", "vrm-connector.js", "vrm-bridge.js"],
+      "run_at": "document_end",
+      "world": "MAIN"
+    },
     {
       "matches": ["https://claude.ai/*"],
       "js": ["content.js"],
       "run_at": "document_end"
     }
   ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
@@ -217,16 +268,105 @@ text = text.replace(/ユーザー[がはに].+?(?=そうですね|はい|いい�
 - Web Audio APIで再生
 - AudioBuffer生成・デコード
 - Promise型で再生完了を待機
+- **VTubeStudio/VRM連携時**: AnalyserNode生成・音量解析
+- **口パクアニメーション**: `animateMouth()`でリアルタイム制御
 
 ---
 
-### 3. background.js（バックグラウンドサービスワーカー）
+### 3. vts-connector.js（VTubeStudio連携 - MAIN World）
+
+**VTubeStudioConnector クラス**
+- VTubeStudio WebSocket API（localhost:8001）との通信を管理
+
+**主要メソッド:**
+
+##### `connect()`
+- WebSocket接続確立
+- 自動認証（トークン管理 - localStorage）
+- 接続失敗時の自動再接続（5秒インターバル）
+
+##### `setMouthOpen(value)`
+- `VoiceVolumePlusWhisperVolume`パラメータを制御
+- 値の範囲: 0.0（閉じる）～ 1.0（開く）
+
+---
+
+### 4. vrm-connector.js（VRM連携 - MAIN World）
+
+**VRMConnector クラス**
+- VRM VMC Protocol（VSeeFace等）との通信を管理
+- WebSocket Bridge Server（localhost:8765）経由でOSC送信
+
+**主要メソッド:**
+
+##### `connect()`
+- WebSocket接続確立（Bridge Server）
+- 接続失敗時の自動再接続（5秒インターバル）
+
+##### `setMouthOpen(value)`
+- アニメ風口パクアルゴリズム
+- 音声検出時: 8フレーム（約133ms）ごとに「大きく開く(0.8)」と「小さく開く(0.2)」を交互切り替え
+- 無音時: 完全に口を閉じる（閾値8）
+- 人の声帯域（80Hz-3.5kHz）を重視した音量解析
+
+---
+
+### 5. vrm-bridge.js（ISOLATED/MAIN World通信ブリッジ - MAIN World）
+
+**役割:**
+- ISOLATED world（content.js）とMAIN world（vrm-connector.js）間のpostMessage通信を仲介
+
+**イベントハンドラ:**
+```javascript
+window.addEventListener('message', (event) => {
+  // ISOLATED worldからのメッセージを受信
+  if (event.data.type === 'VRM_CHECK_CONNECTION') {
+    // VRMConnectorに問い合わせ
+    const connected = window.vrmConnector?.isConnected;
+    window.postMessage({ 
+      type: 'VRM_CONNECTION_RESPONSE', 
+      connected 
+    }, '*');
+  }
+});
+```
+
+---
+
+### 6. bridge-server.js（WebSocket-OSC Bridge Server - Node.js）
+
+**役割:**
+- WebSocket（ブラウザ拡張機能）とOSC（VSeeFace等）の通信を橋渡し
+
+**主要機能:**
+- WebSocket Server（localhost:8765）でブラウザからのメッセージを受信
+- OSC Client（localhost:39540）でVMC Protocolメッセージを送信
+- `/VMC/Ext/Blend/Val`アドレスで口パクパラメータを制御
+
+**依存パッケージ:**
+- `ws`: WebSocketサーバー実装
+- `osc`: OSCプロトコル実装
+
+---
+
+### 7. background.js（バックグラウンドサービスワーカー）
 
 #### 役割
 - CORS制約を回避してVOICEVOX APIを呼び出し
 - Content Scriptからのメッセージを受信
+- **ping/pong機構**でService Workerのスリープを防止（v1.1.0）
 
 #### メッセージハンドラ
+
+**アクション: `ping`（v1.1.0追加）**
+```javascript
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === 'ping') {
+    sendResponse({ success: true });
+    return true;
+  }
+});
+```
 
 **アクション: `synthesize`**
 ```javascript
@@ -243,6 +383,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 });
 ```
+
+**Service Worker Sleep対策（v1.1.0）:**
+- Chrome MV3のService Workerは非アクティブ時にスリープ
+- `synthesize`呼び出し前に`ping`を送信してウェイクアップ
+- タイムアウト時間: 25秒 → 10秒に短縮
+- リトライ回数: 1回 → 2回に拡大
 
 #### `synthesizeAudio(text, speakerID)`
 
@@ -435,20 +581,34 @@ this.processedElements.add(element);
 
 ---
 
-## 🐛 既知の問題・制限事項
+## 🐛 既知の問題・制限事項（解決済み含む）
 
 ### 1. ストリーミング中の誤検出
 **問題:** ストリーミング完了前に処理すると「考え中...」のみが抽出される  
-**対策:** `waitForStreamingComplete()`で完了待機
+**対策:** `waitForStreamingComplete()`で完了待機  
+**状態:** ✅ 解決済み（v0.9.0）
 
-### 2. Message Port Closed Error
-**問題:** 稀に "The message port closed before a response was received" エラー  
-**影響:** 機能には影響なし  
-**状態:** 監視中
+### 2. Message Port Closed Error（Service Worker Sleep問題）
+**問題:** "The message port closed before a response was received" エラー  
+**原因:** Chrome MV3のService Workerが非アクティブ時にスリープ  
+**対策:** ping/pong機構で事前ウェイクアップ（v1.1.0）  
+**状態:** ✅ 解決済み（v1.1.0）
 
 ### 3. タイムアウト後の重複処理
 **問題:** 10秒タイムアウト後に処理、その後ストリーミング完了でも処理  
-**対策:** WeakSetで重複処理をスキップ
+**対策:** WeakSetで重複処理をスキップ  
+**状態:** ✅ 解決済み（v0.9.0）
+
+### 4. VRM口パクが動作しない（ISOLATED/MAIN World問題）
+**問題:** Content ScriptはISOLATED worldで動作し、ページの`window`オブジェクトにアクセスできない  
+**症状:** `window.vrmConnector.isConnected`が常にundefinedで口パク未動作  
+**対策:** postMessageブリッジ（vrm-bridge.js）で通信を仲介（v1.1.0）  
+**状態:** ✅ 解決済み（v1.1.0）
+
+### 5. Extension Context Invalidation
+**問題:** 拡張機能再読み込み時にContent Scriptが無効化され、大量のエラー  
+**対策:** `chrome.runtime.id`で無効化検出、`fatal`フラグで静かに終了（v1.1.0）  
+**状態:** ✅ 解決済み（v1.1.0）
 
 ---
 
@@ -504,6 +664,35 @@ F12でデベロッパーツールを開き、以下のログを確認：
 
 ---
 
+## 📝 開発履歴
+
+### v1.1.0 (2025-01-02) - VRM連携機能追加
+- ✅ VRM連携機能実装（VSeeFace対応）
+- ✅ VMC Protocol経由でVRMモデル制御
+- ✅ WebSocket Bridge Server（Node.js）実装
+- ✅ ISOLATED/MAIN World通信ブリッジ実装
+- ✅ アニメ風口パクアルゴリズム実装
+- ✅ Background Service Worker最適化（ping/pong）
+- ✅ Chrome Extension ISOLATED/MAIN World問題解決
+- ✅ postMessage event.source検証問題解決
+- ✅ Background Service Worker sleep問題解決
+- ✅ Extension context invalidation処理実装
+
+### v1.0.0 (2025-01-01) - パフォーマンス最適化
+- ✅ 最初のメッセージ待機時間の大幅短縮（約2秒短縮）
+- ✅ VTubeStudio Live2D口パク連携機能実装
+- ✅ 並列プリフェッチ拡大（3チャンク → 5チャンク）
+- ✅ チャンク間待機時間の大幅短縮
+- ✅ エラーハンドリング改善
+
+### v0.9.0 (2024-12-27) - 初期バージョン
+- ✅ 基本的な音声読み上げ機能実装
+- ✅ VOICEVOX API連携
+- ✅ Claude応答検出（MutationObserver）
+- ✅ 自動音声合成・再生
+
+---
+
 ## 📝 今後の改善案
 
 ### 機能追加
@@ -511,24 +700,30 @@ F12でデベロッパーツールを開き、以下のログを確認：
 - [ ] 他のVOICEVOXキャラクターの選択
 - [ ] 読み上げ範囲の設定（全文/要約/最初の文）
 - [ ] 読み上げON/OFF切り替えショートカットキー
+- [ ] 他のVRM対応ソフト連携（Warudo, 3tene等）
 
 ### パフォーマンス改善
 - [ ] 頻出フレーズの事前合成キャッシュ
-- [ ] ストリーミング完了待機時間の最適化
 - [ ] テキスト抽出処理の最適化
 
 ### UI改善
 - [ ] ポップアップでのキャラクター選択UI
 - [ ] 音声速度スライダー
 - [ ] 読み上げ履歴表示
+- [ ] VTubeStudio/VRM接続状態の詳細表示
 
 ---
 
 ## 🔗 関連リンク
 
 - **VOICEVOX Engine:** https://voicevox.hiroshiba.jp/
+- **VTubeStudio:** https://denchisoft.com/
+- **VTubeStudio API:** https://github.com/DenchiSoft/VTubeStudio
+- **VSeeFace:** https://www.vseeface.icu/
+- **VMC Protocol:** https://protocol.vmc.info/
 - **Chrome Extensions Manifest V3:** https://developer.chrome.com/docs/extensions/mv3/
 - **Web Audio API:** https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API
+- **postMessage API:** https://developer.mozilla.org/en-US/docs/Web/API/Window/postMessage
 
 ---
 
@@ -541,6 +736,7 @@ VOICEVOX Engineの利用規約に従ってください。
 
 ## ✅ チェックリスト（デプロイ前）
 
+### 基本機能
 - [x] VOICEVOX Engine起動確認
 - [x] Chrome拡張機能読み込み確認
 - [x] Claude AIでの動作確認
@@ -550,7 +746,22 @@ VOICEVOX Engineの利用規約に従ってください。
 - [x] 重複再生防止動作確認
 - [x] ストリーミング完了待機動作確認
 
+### VTubeStudio連携（v1.0.0+）
+- [x] VTubeStudio起動・モデルロード確認
+- [x] WebSocket接続確認（localhost:8001）
+- [x] 認証トークン取得確認
+- [x] 口パクアニメーション動作確認
+- [x] 音声同期精度確認
+
+### VRM連携（v1.1.0+）
+- [x] VSeeFace起動・VRMモデルロード確認
+- [x] Bridge Server起動確認（npm start）
+- [x] WebSocket接続確認（localhost:8765）
+- [x] OSC通信確認（localhost:39540）
+- [x] アニメ風口パク動作確認
+- [x] ISOLATED/MAIN World通信確認
+
 ---
 
-**最終更新:** 2025-10-28  
-**動作確認環境:** Chrome 120+ / Claude AI Web / VOICEVOX Engine 0.14+
+**最終更新:** 2025-01-02  
+**動作確認環境:** Chrome 120+ / Claude AI Web / VOICEVOX Engine 0.14+ / VTubeStudio / VSeeFace

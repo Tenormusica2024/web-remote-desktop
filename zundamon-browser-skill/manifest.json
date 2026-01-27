@@ -14,6 +14,12 @@
   "content_scripts": [
     {
       "matches": ["https://claude.ai/*"],
+      "js": ["vts-connector.js", "vrm-connector.js", "vrm-bridge.js"],
+      "run_at": "document_end",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://claude.ai/*"],
       "js": ["content.js"],
       "run_at": "document_end"
     }

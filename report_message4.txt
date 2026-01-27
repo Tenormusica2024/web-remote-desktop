@@ -1,0 +1,81 @@
+## 🚨 真の原因特定 - collected_atカラム欠損エラー
+
+### 🔍 問題の発見
+
+**ユーザー指摘の通り、526件全て重複は物理的に矛盾**
+- DB総数: 330件
+- 収集件数: 526件
+- **論理的に少なくとも196件は新規であるはず**
+
+### 💀 真の原因
+
+**全ツイートが挿入エラーで失敗していた:**
+```
+[ERROR] ツイート挿入エラー: NOT NULL constraint failed: tweets.collected_at
+```
+
+**問題のあったコード:**
+```python
+INSERT INTO tweets (
+    id, created_at, username, ..., domain, category
+) VALUES (?, ?, ?, ..., ?, ?)
+```
+- `collected_at` カラムは **NOT NULL制約** があるのに、挿入時に値を指定していなかった
+- 全ての挿入が失敗していた
+- しかし `domain_count += 1` はエラー後も実行されていた（try-exceptで握りつぶし）
+- **結果**: ログには「526件収集」と表示されるが、実際はDB挿入0件
+
+### ✅ 修正内容
+
+**1. カウントロジック修正:**
+```python
+domain_count = 0        # 検索結果の総数
+domain_inserted = 0     # 実際に挿入された件数（新規のみ）
+```
+
+**2. 日付分割収集:**
+```python
+date_ranges = [
+    (today, today + timedelta(days=1)),           # 今日
+    (today - timedelta(days=1), today),           # 昨日
+]
+```
+- 12/22と12/21を1日ずつ収集
+- limit=500を各日に適用
+
+**3. 必須カラム追加:**
+```python
+INSERT INTO tweets (
+    id, created_at, username, ..., 
+    domain, category, collected_at, lang, source, search_keyword, confidence
+) VALUES (?, ?, ?, ..., ?, ?, ?, ?, ?, ?, ?)
+```
+- `collected_at`: 現在時刻（ISO形式）
+- `lang`: "ja"（固定）
+- `source`: "search"（固定）
+- `search_keyword`: 検索に使用したキーワード
+- `confidence`: 0.0（デフォルト）
+
+### 🎯 期待される動作
+
+**次回実行時:**
+1. **12/22のツイートを収集** (since:2025-12-22 until:2025-12-23)
+2. **12/21のツイートを収集** (since:2025-12-21 until:2025-12-22)
+3. 各日limit=500で、新規ツイートが確実に抽出される
+4. `collected_at`等の必須カラムが正しく挿入される
+5. **ログに「収集: X件 / 新規挿入: Y件」と正確に表示される**
+
+### ⏰ 次回実行可能時刻
+
+**Rate Limit解除待ち:**
+- 前回ログ: `Next available at 11:56:30`
+- 現在時刻: 12:00頃
+- **すでに実行可能時刻を過ぎている**
+
+### 📋 改善版の主な変更点
+
+1. ✅ **カウントロジック修正** - 新規挿入のみカウント
+2. ✅ **日付分割** - 12/21と12/22を個別に収集
+3. ✅ **必須カラム追加** - collected_at等の欠損エラー解消
+4. ✅ **詳細ログ** - 収集件数と新規挿入件数を分離表示
+5. ✅ **INSERT OR IGNORE削除** - 明示的なSELECTチェックのみ使用

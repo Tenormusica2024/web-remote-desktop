@@ -40,6 +40,9 @@ MONITOR_ISSUE = os.getenv("MONITOR_ISSUE_NUMBER", "5")
 
 API_BASE = "https://api.github.com"
 
+# 最終報告時刻を記録するファイル（Session Endフックとの連携用）
+LAST_REPORT_FILE = ROOT / ".last_report_timestamp"
+
 def post_completion_comment(custom_message=None):
     """
     GitHub Issue（MONITOR_ISSUE番号）にタスク報告コメントを投稿
@@ -90,6 +93,14 @@ def post_completion_comment(custom_message=None):
             print(f"OK Task report posted to GitHub Issue #{MONITOR_ISSUE}")
             print(f"Comment URL: {comment_data.get('html_url', 'N/A')}")
             print(f"Posted at: {timestamp}")
+            
+            # 最終報告時刻を記録（Session Endフックが重複報告を防ぐため）
+            try:
+                with open(LAST_REPORT_FILE, 'w', encoding='utf-8') as f:
+                    f.write(datetime.now().isoformat())
+            except Exception as e:
+                print(f"Warning: Failed to write last report timestamp: {e}")
+            
             return True
         else:
             print(f"NG Post failed: {response.status_code}")

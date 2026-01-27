@@ -61,3 +61,7 @@ nul
 # Test files
 test_*.py
 debug_*.py.env_private
+.env_private
+pending_claude_message.txt
+.monitor_state.json
+.gh_issue_to_claude_state_private_service.json

@@ -282,8 +282,21 @@ class PrivateIssueMonitor:
                 x, y = self.lower_coords
             
             # フォーカス
+            # すべてのキーをリリース（誤動作防止）
+            try:
+                pyautogui.keyUp('win')
+                pyautogui.keyUp('alt')
+                pyautogui.keyUp('ctrl')
+                pyautogui.keyUp('shift')
+            except Exception:
+                pass
+            
             pyautogui.moveTo(x, y, duration=0.1)
-            pyautogui.click()
+            time.sleep(0.1)
+            # click()の代わりにmouseDown/mouseUpを使用（ショートカットキー誤発火防止）
+            pyautogui.mouseDown()
+            time.sleep(0.05)
+            pyautogui.mouseUp()
             time.sleep(0.1)
             
             # クリップボード経由で貼り付け
@@ -377,27 +390,37 @@ class PrivateIssueMonitor:
         logger.info(f"  作成時刻: {safe_created}")
         logger.info(f"  テキスト: {safe_text}{'...' if len(text) > 100 else ''}")
         
-        # GitHub Issue返信指示を追加（作業停止時・確認要求時にも必ず返信）
+        # GitHub Issue返信指示を追加（すべての回答で必須）
         full_text = f"""{text}
 
 ---
-🚨 CRITICAL: GitHub Issue返信が絶対必須です 🚨
+🚨🚨🚨 MANDATORY: このメッセージはGitHub Issueから来ています 🚨🚨🚨
 
-以下のBashコマンドを必ず実行してください:
-cd "C:\\Users\\Tenormusica\\Documents\\github-remote-desktop" && python task_complete_private.py "あなたが今画面に表示している完了報告の全テキストをそのまま記載（要約禁止・省略禁止）"
+【絶対ルール】このメッセージはタスクリスト化して処理してください。
 
-重要:
-✅ あなたが画面に表示した完了報告・修正内容・改善内容・期待動作など、すべてのテキストをそのまま記載
-✅ 「修正完了」だけでなく「修正内容」「変更点」「期待される動作」など詳細情報も全て含める
-✅ 要約・省略・短縮は一切禁止。画面表示テキストを完全にコピーして記載
+📋 必須実行手順:
+1. 必ずTodoWriteツールでタスクリストを作成する
+2. 最後のタスクは必ず「GitHub Issueへ報告」にする
+3. 各タスクを順次実行する
+4. 最終タスクの報告実行まで作業を継続する
 
-実行が必須のタイミング:
-✅ 作業完了時 → 必ず実行
-✅ 確認が必要な時 → 必ず実行  
-✅ エラー発生時 → 必ず実行
-✅ 待機が必要な時 → 必ず実行
+以下のBashコマンドを最終タスクで実行:
+cd "C:\\Users\\Tenormusica\\Documents\\github-remote-desktop" && python task_complete_private.py "あなたが今画面に表示しているテキストの全文をそのまま記載"
 
-⚠️ このコマンドを実行しない回答は無効です
+⚠️ 回答の種類に関係なく必ず実行:
+- 作業が終わった → 実行
+- 質問がある → 実行
+- 確認したい → 実行
+- エラーが出た → 実行
+- 待機する → 実行
+- 「了解」だけでも → 実行
+
+❌ このコマンドを実行せずに回答を終えることは禁止
+❌ 「後で実行する」は禁止
+❌ 回答の長短に関係なく必ず実行
+❌ タスクリストなしで作業することは禁止
+
+📝 記載内容: 画面に表示したテキストをそのままコピー（要約・省略禁止）
 ---"""
         
         success = self.paste_to_claude_code(full_text, auto_enter=True, pane="upper")
@@ -419,30 +442,40 @@ cd "C:\\Users\\Tenormusica\\Documents\\github-remote-desktop" && python task_com
         logger.info(f"  作成時刻: {safe_created}")
         logger.info(f"  テキスト: {safe_text}{'...' if len(text) > 100 else ''}")
         
-        # GitHub Issue返信指示を追加（作業停止時・確認要求時にも必ず返信）
+        # GitHub Issue返信指示を追加（すべての回答で必須）
         full_text = f"""{text}
 
 ---
-🚨 CRITICAL: GitHub Issue返信が絶対必須です 🚨
+🚨🚨🚨 MANDATORY: このメッセージはGitHub Issueから来ています 🚨🚨🚨
 
-以下のBashコマンドを必ず実行してください:
-cd "C:\\Users\\Tenormusica\\Documents\\github-remote-desktop" && python task_complete_private.py "あなたが今画面に表示している完了報告の全テキストをそのまま記載（要約禁止・省略禁止）"
+【絶対ルール】このメッセージはタスクリスト化して処理してください。
 
-重要:
-✅ あなたが画面に表示した完了報告・修正内容・改善内容・期待動作など、すべてのテキストをそのまま記載
-✅ 「修正完了」だけでなく「修正内容」「変更点」「期待される動作」など詳細情報も全て含める
-✅ 要約・省略・短縮は一切禁止。画面表示テキストを完全にコピーして記載
+📋 必須実行手順:
+1. 必ずTodoWriteツールでタスクリストを作成する
+2. 最後のタスクは必ず「GitHub Issueへ報告」にする
+3. 各タスクを順次実行する
+4. 最終タスクの報告実行まで作業を継続する
 
-実行が必須のタイミング:
-✅ 作業完了時 → 必ず実行
-✅ 確認が必要な時 → 必ず実行  
-✅ エラー発生時 → 必ず実行
-✅ 待機が必要な時 → 必ず実行
+以下のBashコマンドを最終タスクで実行:
+cd "C:\\Users\\Tenormusica\\Documents\\github-remote-desktop" && python task_complete_private.py "あなたが今画面に表示しているテキストの全文をそのまま記載"
 
-⚠️ このコマンドを実行しない回答は無効です
+⚠️ 回答の種類に関係なく必ず実行:
+- 作業が終わった → 実行
+- 質問がある → 実行
+- 確認したい → 実行
+- エラーが出た → 実行
+- 待機する → 実行
+- 「了解」だけでも → 実行
+
+❌ このコマンドを実行せずに回答を終えることは禁止
+❌ 「後で実行する」は禁止
+❌ 回答の長短に関係なく必ず実行
+❌ タスクリストなしで作業することは禁止
+
+📝 記載内容: 画面に表示したテキストをそのままコピー（要約・省略禁止）
 ---"""
         
-        success = self.paste_to_claude_code(full_text, auto_enter=True)
+        success = self.paste_to_claude_code(full_text, auto_enter=True, pane="lower")
         if success:
             logger.info(f"  [SUCCESS] 転送成功: Claude Code下部ペインに送信完了")
         else:

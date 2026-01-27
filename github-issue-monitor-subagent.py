@@ -52,7 +52,12 @@ def load_state():
     if STATE_FILE.exists():
         try:
             with open(STATE_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
+                state = json.load(f)
+                # auto_reported_ids が10個を超えたら古いものから削除
+                if "auto_reported_ids" in state and len(state["auto_reported_ids"]) > 10:
+                    state["auto_reported_ids"] = state["auto_reported_ids"][-10:]
+                    log(f"auto_reported_ids を整理（最新10件を保持）")
+                return state
         except:
             pass
     return {
@@ -294,16 +299,20 @@ def monitor_loop():
                     state["last_claude_message_id"] = comment_id
                     save_state(state)
                     
-                # Claude Codeからの応答を検出
-                elif state["pending_response"] and is_claude_response(
+                # Claude Codeからの応答を検出（pending_responseがある場合のみ）
+                elif is_claude_response(
                     comment, 
-                    pending_message_id=state["pending_response"].get("id"),
-                    pending_created_at=state["pending_response"].get("created_at")
+                    pending_message_id=state["pending_response"].get("id") if state["pending_response"] else None,
+                    pending_created_at=state["pending_response"].get("created_at") if state["pending_response"] else None
                 ):
-                    log(f"Claude Code応答検出（ID={comment['id']}）、応答待ちクリア")
-                    state["pending_response"] = None
-                    save_state(state)
-                    break
+                    # pending_responseがある場合のみクリア
+                    if state["pending_response"]:
+                        log(f"Claude Code応答検出（ID={comment['id']}）、応答待ちクリア")
+                        state["pending_response"] = None
+                        save_state(state)
+                    else:
+                        # pending_responseがない場合は単にClaude応答を検出
+                        log(f"Claude Code応答を検出（ID={comment['id']}）")
             
             # 応答待ちチェック
             if state["pending_response"]:
@@ -315,10 +324,12 @@ def monitor_loop():
                     log(f"応答タイムアウト！{elapsed:.0f}秒経過")
                     
                     # 自動報告実行（重複防止付き）
-                    if auto_report(state["pending_response"], state):
-                        # 報告成功したら応答待ちクリア
-                        state["pending_response"] = None
-                        save_state(state)
+                    auto_report_result = auto_report(state["pending_response"], state)
+                    
+                    # 報告成功でも既報告でも、応答待ちクリア
+                    # （既報告の場合も pending_response を残すと無限ループになる）
+                    state["pending_response"] = None
+                    save_state(state)
                 else:
                     log(f"応答待機中... {elapsed:.0f}/{WAIT_THRESHOLD}秒")
             

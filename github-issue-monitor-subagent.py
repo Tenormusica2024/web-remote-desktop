@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 GitHub Issue #5 Monitor SubAgent
 Claude Codeの応答漏れを検出して自動報告する外部監視プロセス
@@ -10,12 +11,18 @@ Claude Codeの応答漏れを検出して自動報告する外部監視プロセ
 """
 
 import os
+import sys
+import io
 import time
 import json
 import subprocess
 import datetime
 from pathlib import Path
-import sys
+
+# Windows環境でのUTF-8出力を確実にする
+if sys.platform == 'win32':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='ignore')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='ignore')
 
 # 設定
 GITHUB_OWNER = "Tenormusica2024"
@@ -84,7 +91,8 @@ def get_issue_comments():
             str(wrapper_path), "-Action", "get-comments"
         ]
         
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30, encoding='utf-8')
+        # Windows環境でPowerShell経由の出力を正しく処理
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30, encoding='utf-8', errors='ignore')
         
         if result.returncode == 0 and result.stdout:
             # "Claude Auto-Mode loaded" の行を除外してJSONをパース
@@ -266,12 +274,15 @@ def monitor_loop():
             
             log(f"コメント数: {len(comments)}件")
             
+            # 新しいClaude Code宛メッセージを最新のものから1つだけ処理
+            latest_new_message = None
+            
             for comment in comments_sorted:
                 comment_id = comment['id']
                 
                 # Claude Code宛のメッセージを検出
                 if is_claude_message(comment):
-                    # 既知のメッセージはスキップ
+                    # 既知のメッセージに到達したらループ終了
                     if state["last_claude_message_id"] == comment_id:
                         break
                     
@@ -282,25 +293,32 @@ def monitor_loop():
                     # 古すぎるメッセージはスキップ（1時間以上前）
                     if elapsed > 3600:  # 1時間 = 3600秒
                         log(f"  古すぎるメッセージをスキップ: ID={comment_id}, 経過={elapsed/60:.1f}分")
-                        state["last_claude_message_id"] = comment_id  # 既読として記録
-                        save_state(state)
                         continue
                     
                     log(f"Claude Code宛メッセージ検出: ID={comment_id}, 経過={elapsed:.0f}秒")
                     log(f"  送信者: {comment['user']['login']}, 時刻: {comment['created_at']}")
                     
-                    # 応答待ちとして記録
-                    state["pending_response"] = {
-                        "id": comment_id,
-                        "user": comment['user']['login'],
-                        "created_at": comment['created_at'],
-                        "elapsed_minutes": elapsed / 60
-                    }
-                    state["last_claude_message_id"] = comment_id
-                    save_state(state)
+                    # 最新の新しいメッセージとして記録（1つだけ）
+                    if latest_new_message is None:
+                        latest_new_message = {
+                            "id": comment_id,
+                            "user": comment['user']['login'],
+                            "created_at": comment['created_at'],
+                            "elapsed_minutes": elapsed / 60
+                        }
                     
-                # Claude Codeからの応答を検出（pending_responseがある場合のみ）
-                elif is_claude_response(
+                    # last_claude_message_idは最新のメッセージIDに更新
+                    state["last_claude_message_id"] = comment_id
+            
+            # 新しいメッセージが見つかった場合、最新の1つだけをpending_responseに設定
+            if latest_new_message:
+                log(f"  最新メッセージを応答待ちに設定: ID={latest_new_message['id']}")
+                state["pending_response"] = latest_new_message
+                save_state(state)
+            
+            # Claude Codeからの応答を検出
+            for comment in comments_sorted:
+                if is_claude_response(
                     comment, 
                     pending_message_id=state["pending_response"].get("id") if state["pending_response"] else None,
                     pending_created_at=state["pending_response"].get("created_at") if state["pending_response"] else None
@@ -313,6 +331,7 @@ def monitor_loop():
                     else:
                         # pending_responseがない場合は単にClaude応答を検出
                         log(f"Claude Code応答を検出（ID={comment['id']}）")
+                    break
             
             # 応答待ちチェック
             if state["pending_response"]:
